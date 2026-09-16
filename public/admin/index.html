@@ -1,0 +1,666 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Airco Agent — Zostel Mumbai</title>
+<style>
+  :root {
+    --bg:#f6f7f9; --card:#fff; --line:#e5e7eb; --text:#111827; --dim:#6b7280;
+    --accent:#4f46e5; --accent-soft:#eef2ff; --green:#059669; --green-soft:#ecfdf5;
+    --red:#dc2626; --red-soft:#fef2f2; --amber:#d97706; --amber-soft:#fffbeb;
+    --shadow:0 1px 3px rgba(16,24,40,.08); --radius:10px;
+  }
+  * { box-sizing:border-box; margin:0; padding:0; font-family:-apple-system,'Segoe UI',Roboto,'Helvetica Neue',sans-serif; }
+  body { background:var(--bg); color:var(--text); font-size:14px; }
+
+  /* ---- top nav ---- */
+  header.topbar { position:sticky; top:0; z-index:50; display:flex; align-items:center; gap:20px;
+    padding:0 20px; height:56px; background:#111827; color:#fff; }
+  .brand { display:flex; align-items:center; gap:10px; font-weight:700; font-size:15px; }
+  .brand .dot { width:28px; height:28px; border-radius:8px; background:linear-gradient(135deg,#6366f1,#8b5cf6);
+    display:flex; align-items:center; justify-content:center; font-size:13px; font-weight:800; }
+  .brand .sub { font-weight:400; font-size:11px; opacity:.6; }
+  nav.tabs { display:flex; gap:4px; margin-left:16px; }
+  nav.tabs button { background:transparent; color:#9ca3af; border:none; padding:6px 14px; border-radius:8px;
+    font-size:13.5px; font-weight:500; cursor:pointer; }
+  nav.tabs button:hover { color:#fff; background:rgba(255,255,255,.08); }
+  nav.tabs button.active { color:#fff; background:rgba(255,255,255,.14); }
+  .topbar .right { margin-left:auto; display:flex; align-items:center; gap:12px; }
+  .conn { font-size:11.5px; color:#9ca3af; display:flex; align-items:center; gap:6px; }
+  .conn::before { content:''; width:7px; height:7px; border-radius:50%; background:#10b981; }
+  .conn.err::before { background:#ef4444; }
+  .lockbtn { background:rgba(255,255,255,.1); color:#d1d5db; border:none; padding:5px 12px;
+    border-radius:7px; font-size:12.5px; cursor:pointer; }
+  .lockbtn:hover { background:rgba(255,255,255,.2); color:#fff; }
+
+  /* ---- layout ---- */
+  main { padding:20px; max-width:1440px; margin:0 auto; }
+  .view { display:none; }
+  .view.active { display:block; }
+  .split { display:grid; grid-template-columns:400px 1fr; gap:16px; align-items:start; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:var(--radius);
+    box-shadow:var(--shadow); overflow:hidden; }
+  .card h2 { font-size:13px; font-weight:600; color:var(--dim); text-transform:uppercase; letter-spacing:.4px;
+    padding:12px 16px; border-bottom:1px solid var(--line); display:flex; align-items:center; gap:8px; }
+  .card h2 .count { font-weight:600; color:#9ca3af; }
+  .card h2 .spacer { margin-left:auto; }
+  .list { overflow-y:auto; }
+  .maxh-360 { max-height:360px; }
+  .maxh-560 { max-height:560px; }
+
+  /* ---- rows / people ---- */
+  .prow { display:flex; align-items:center; gap:12px; padding:11px 16px; border-bottom:1px solid #f3f4f6; }
+  .prow:last-child { border-bottom:none; }
+  .prow.clickable { cursor:pointer; }
+  .prow.clickable:hover { background:#f9fafb; }
+  .prow.selected { background:var(--accent-soft); }
+  .avatar { width:36px; height:36px; border-radius:50%; flex:none; display:flex; align-items:center;
+    justify-content:center; font-size:13px; font-weight:700; color:#fff; }
+  .pmain { flex:1; min-width:0; }
+  .pname { font-weight:600; display:flex; align-items:center; gap:6px; }
+  .pmeta { font-size:12px; color:var(--dim); margin-top:2px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .flag-paused { font-size:10px; font-weight:800; color:var(--red); background:var(--red-soft);
+    padding:1px 6px; border-radius:8px; }
+  .flag-optout { font-size:10px; font-weight:800; color:var(--amber); background:var(--amber-soft);
+    padding:1px 6px; border-radius:8px; }
+
+  /* ---- badges ---- */
+  .badge { font-size:11px; padding:3px 9px; border-radius:999px; font-weight:600; white-space:nowrap; }
+  .b-booked{background:#e0e7ff;color:#4338ca}.b-pre_arrival{background:#ccfbf1;color:#0f766e}
+  .b-checked_in,.b-in_stay{background:#d1fae5;color:#047857}.b-checkout_pending{background:#fef3c7;color:#b45309}
+  .b-checked_out{background:#f3f4f6;color:#4b5563}.b-review_requested{background:#f3e8ff;color:#7e22ce}
+  .b-closed{background:#1f2937;color:#fff}
+
+  /* ---- stats ---- */
+  .stats { display:grid; grid-template-columns:repeat(auto-fit,minmax(170px,1fr)); gap:12px; margin-bottom:16px; }
+  .stat { background:var(--card); border:1px solid var(--line); border-radius:var(--radius);
+    padding:14px 16px; box-shadow:var(--shadow); }
+  .stat .n { font-size:26px; font-weight:800; letter-spacing:-.5px; }
+  .stat .l { font-size:12px; color:var(--dim); margin-top:2px; font-weight:500; }
+  .stat.accent .n { color:var(--accent); } .stat.green .n { color:var(--green); }
+  .stat.amber .n { color:var(--amber); } .stat.red .n { color:var(--red); }
+  .cols3 { display:grid; grid-template-columns:repeat(3,1fr); gap:16px; align-items:start; }
+
+  /* ---- buttons & forms ---- */
+  button.btn { background:var(--accent); color:#fff; border:none; padding:7px 14px; border-radius:8px;
+    font-size:13px; font-weight:600; cursor:pointer; display:inline-flex; align-items:center; gap:6px; }
+  button.btn:hover { background:#4338ca; }
+  button.btn:disabled { opacity:.45; cursor:default; }
+  button.btn.secondary { background:#fff; color:var(--text); border:1px solid var(--line); }
+  button.btn.secondary:hover { background:#f9fafb; }
+  button.btn.green { background:var(--green); } button.btn.green:hover { background:#047857; }
+  button.btn.danger { background:var(--red); } button.btn.danger:hover { background:#b91c1c; }
+  button.btn.small { padding:4px 10px; font-size:12px; border-radius:7px; }
+  label.fl { font-size:12px; color:var(--dim); display:block; margin-bottom:4px; font-weight:500; }
+  input.in, textarea.in { width:100%; padding:8px 11px; border:1px solid var(--line); border-radius:8px;
+    font-size:13.5px; background:#fff; color:var(--text); }
+  input.in:focus, textarea.in:focus { outline:2px solid var(--accent-soft); border-color:var(--accent); }
+  .form-grid { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+  .full { grid-column:1/-1; }
+  .searchbox { display:flex; align-items:center; gap:8px; padding:8px 12px; border-bottom:1px solid var(--line); }
+  .searchbox svg { flex:none; opacity:.45; }
+
+  /* ---- guest detail ---- */
+  .dhead { display:flex; align-items:center; gap:14px; padding:14px 18px; border-bottom:1px solid var(--line);
+    background:linear-gradient(180deg,#fbfbfd,#fff); }
+  .dhead .avatar { width:44px; height:44px; font-size:15px; }
+  .dactions { display:flex; gap:8px; flex-wrap:wrap; margin-left:auto; align-items:center; }
+  .dtabs { display:flex; gap:2px; padding:0 12px; border-bottom:1px solid var(--line); background:#fbfbfd; }
+  .dtabs button { background:none; border:none; padding:10px 14px; font-size:13px; font-weight:600;
+    color:var(--dim); cursor:pointer; border-bottom:2px solid transparent; }
+  .dtabs button.active { color:var(--accent); border-bottom-color:var(--accent); }
+  .dbody { padding:16px 18px; overflow-y:auto; max-height:calc(100vh - 240px); }
+
+  /* ---- chat ---- */
+  .chatwrap { display:flex; flex-direction:column; gap:10px; padding:6px 0; }
+  .bubble { max-width:72%; padding:9px 13px; border-radius:14px; font-size:13.5px; line-height:1.45;
+    position:relative; box-shadow:var(--shadow); word-wrap:break-word; }
+  .b-in { background:#fff; border:1px solid var(--line); border-bottom-left-radius:4px; align-self:flex-start; }
+  .b-out { background:var(--accent-soft); border:1px solid #e0e7ff; border-bottom-right-radius:4px; align-self:flex-end; }
+  .bmeta { font-size:10.5px; color:#9ca3af; margin-top:4px; display:flex; gap:6px; align-items:center; justify-content:flex-end; }
+  .bsys { align-self:center; font-size:11px; color:var(--dim); background:#f3f4f6; padding:3px 10px; border-radius:999px; }
+  .composer { display:flex; gap:8px; padding:12px 0 4px; border-top:1px solid var(--line); margin-top:6px; }
+  .window-note { font-size:11.5px; color:var(--amber); background:var(--amber-soft); padding:6px 10px;
+    border-radius:8px; margin-top:8px; }
+  .st-sent{color:#9ca3af}.st-delivered{color:var(--green)}.st-read{color:#7e22ce}.st-queued{color:var(--amber)}.st-failed{color:var(--red);font-weight:700}
+
+  /* ---- timeline ---- */
+  .tl-item { position:relative; padding:0 0 14px 20px; border-left:2px solid var(--line); margin-left:8px; }
+  .tl-item:last-child { border-left-color:transparent; }
+  .tl-item::before { content:''; position:absolute; left:-6px; top:3px; width:10px; height:10px;
+    border-radius:50%; background:var(--accent); border:2px solid #fff; }
+  .tl-item .t { color:var(--dim); font-size:11.5px; margin-top:2px; }
+
+  /* ---- misc ---- */
+  .empty { padding:36px 20px; text-align:center; color:var(--dim); font-size:13px; }
+  .empty .big { font-size:15px; font-weight:600; color:var(--text); margin-bottom:4px; }
+  .toasts { position:fixed; bottom:18px; right:18px; display:flex; flex-direction:column; gap:8px; z-index:100; }
+  .toast { background:#111827; color:#fff; padding:10px 16px; border-radius:10px; font-size:13px;
+    box-shadow:0 8px 24px rgba(0,0,0,.25); max-width:380px; animation:tin .18s ease; }
+  .toast.err { background:var(--red); }
+  @keyframes tin { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:none; } }
+  .preview-box { background:#f9fafb; border:1px dashed var(--line); border-radius:10px; padding:12px 14px;
+    font-size:13px; color:var(--text); line-height:1.5; }
+  .preview-label { font-size:11px; font-weight:700; color:var(--dim); text-transform:uppercase;
+    letter-spacing:.4px; margin-bottom:6px; }
+  .section-h { font-size:12px; font-weight:700; color:var(--dim); text-transform:uppercase;
+    letter-spacing:.4px; margin:18px 0 8px; }
+  .section-h:first-child { margin-top:0; }
+
+  /* ---- gate ---- */
+  #gate { max-width:400px; margin:90px auto; padding:28px; background:var(--card);
+    border:1px solid var(--line); border-radius:14px; box-shadow:var(--shadow); }
+  #gate h2 { margin-bottom:4px; }
+  #gate .sub { color:var(--dim); font-size:13px; margin-bottom:18px; }
+
+  @media (max-width:1020px) {
+    .split, .cols3 { grid-template-columns:1fr; }
+    .dbody { max-height:none; }
+    nav.tabs button { padding:6px 8px; }
+  }
+</style>
+</head>
+<body>
+
+<div id="gate" style="display:none">
+  <h2>Airco Agent</h2>
+  <div class="sub">Guest operations console — Zostel Mumbai</div>
+  <label class="fl">Admin token</label>
+  <input type="password" id="token-input" placeholder="Paste ADMIN_TOKEN from .env" class="in">
+  <div style="margin-top:14px"><button class="btn" onclick="saveToken()">Unlock dashboard</button></div>
+  <div id="gate-msg" class="toast err" style="display:none;position:static;max-width:none;margin-top:12px"></div>
+</div>
+
+<div id="app" style="display:none">
+<header class="topbar">
+  <div class="brand"><div class="dot">A</div><div>Airco Agent<div class="sub">Zostel Mumbai</div></div></div>
+  <nav class="tabs">
+    <button id="tab-today" onclick="switchView('today')">Today</button>
+    <button id="tab-guests" onclick="switchView('guests')">Guests</button>
+    <button id="tab-activities" onclick="switchView('activities')">Activities</button>
+  </nav>
+  <div class="right">
+    <div class="conn" id="conn-status">connected</div>
+    <button class="lockbtn" onclick="logout()">Lock</button>
+  </div>
+</header>
+
+<main>
+  <!-- ================= TODAY ================= -->
+  <section class="view" id="view-today">
+    <div class="stats" id="today-stats"></div>
+    <div class="cols3">
+      <div class="card">
+        <h2>Arriving today <span class="count" id="c-arrivals"></span><span class="spacer"></span>
+          <button class="btn secondary small" onclick="switchView('guests');openAdd()">+ Add guest</button></h2>
+        <div class="list maxh-560" id="today-arrivals"></div>
+      </div>
+      <div class="card">
+        <h2>Checking out today <span class="count" id="c-departures"></span></h2>
+        <div class="list maxh-560" id="today-departures"></div>
+      </div>
+      <div class="card">
+        <h2>In the property <span class="count" id="c-inhouse"></span></h2>
+        <div class="list maxh-560" id="today-inhouse"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= GUESTS ================= -->
+  <section class="view" id="view-guests">
+    <div class="split">
+      <div class="card">
+        <h2>Guests <span class="count" id="guest-count"></span><span class="spacer"></span>
+          <button class="btn secondary small" onclick="openAdd()">+ Add</button></h2>
+        <div class="searchbox">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+          <input class="in" id="search" placeholder="Search name, phone, room…" style="border:none;padding:4px 0;background:transparent" oninput="renderGuestList()">
+        </div>
+        <div class="list maxh-560" id="guest-list"></div>
+      </div>
+      <div class="card" id="detail-card">
+        <div id="detail"><div class="empty"><div class="big">No guest selected</div>Pick a guest to see their chat, journey, and profile.</div></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= ACTIVITIES ================= -->
+  <section class="view" id="view-activities">
+    <div class="split">
+      <div class="card">
+        <h2>Post an activity</h2>
+        <div style="padding:16px">
+          <div class="form-grid">
+            <div><label class="fl">Date *</label><input type="date" id="act-date" class="in"></div>
+            <div><label class="fl">Time *</label><input id="act-time" class="in" placeholder="e.g. 8 PM" oninput="renderActivityPreview()"></div>
+            <div class="full"><label class="fl">Event name *</label><input id="act-name" class="in" placeholder="Pub Crawl / Pizza Night / Walking Tour" oninput="renderActivityPreview()"></div>
+            <div class="full"><label class="fl">Description</label><input id="act-desc" class="in" placeholder="Meet at reception — first drink on us!" oninput="renderActivityPreview()"></div>
+          </div>
+          <div style="margin-top:14px">
+            <div class="preview-label">Guests will receive</div>
+            <div class="preview-box" id="act-preview">Fill in the activity to preview the message…</div>
+          </div>
+          <div style="margin-top:14px;display:flex;align-items:center;gap:10px">
+            <button class="btn" onclick="postActivity()">Send to in-house guests</button>
+            <span style="font-size:12px;color:var(--dim)">Only guests currently at the property, if policy allows.</span>
+          </div>
+        </div>
+      </div>
+      <div class="card">
+        <h2>Recent activities <span class="count" id="activity-count"></span><span class="spacer"></span>
+          <button class="btn secondary small" onclick="loadActivities()">&#8635;</button></h2>
+        <div class="list maxh-560" id="activity-list"></div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<div class="toasts" id="toasts"></div>
+</div>
+
+<script>
+const KEY = 'airco_admin_token';
+let selectedId = null;
+let detailTab = 'chat';
+let currentView = 'today';
+let guestsCache = [];
+let overviewCache = null;
+
+function token() { return localStorage.getItem(KEY) || ''; }
+function saveToken() { localStorage.setItem(KEY, document.getElementById('token-input').value.trim()); boot(); }
+function logout() { localStorage.removeItem(KEY); location.reload(); }
+
+async function api(path, opts = {}) {
+  const res = await fetch('/admin/api' + path, {
+    ...opts,
+    headers: { 'Content-Type': 'application/json', 'x-admin-token': token(), ...(opts.headers||{}) },
+  });
+  if (res.status === 401) { showGate(''); throw new Error('unauthorized'); }
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(json.error || ('HTTP ' + res.status));
+  return json;
+}
+
+/* ---------- helpers ---------- */
+function esc(s) { return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&','<':'<','>':'>','"':'"',"'":'&#39;'}[c])); }
+function fmtDate(d) { return d ? new Date(d + 'T12:00:00Z').toLocaleDateString('en-IN', { day:'numeric', month:'short' }) : '—'; }
+function fmtTs(t) { return new Date(t).toLocaleString('en-IN', { day:'numeric', month:'short', hour:'2-digit', minute:'2-digit' }); }
+function hue(name) { let h = 0; for (const c of String(name)) h = (h * 31 + c.charCodeAt(0)) % 360; return h; }
+function avatar(name, size) {
+  const initials = String(name||'?').trim().split(/\s+/).map(w => w[0]).slice(0,2).join('').toUpperCase();
+  return `<div class="avatar" style="background:hsl(${hue(name)},55%,48%)${size?';width:'+size+'px;height:'+size+'px':''}">${esc(initials)}</div>`;
+}
+function stateBadge(s) { return `<span class="badge b-${s}">${esc(String(s||'').replace(/_/g,' '))}</span>`; }
+function toast(text, err) {
+  const el = document.createElement('div');
+  el.className = 'toast' + (err ? ' err' : '');
+  el.textContent = text;
+  document.getElementById('toasts').appendChild(el);
+  setTimeout(() => el.remove(), 6000);
+}
+function showGate(msg) {
+  document.getElementById('gate').style.display = 'block';
+  document.getElementById('app').style.display = 'none';
+  const m = document.getElementById('gate-msg');
+  if (msg) { m.textContent = msg; m.style.display = 'block'; } else m.style.display = 'none';
+}
+function lastInboundMs(messages) {
+  const inbound = messages.find(m => m.direction === 'in');
+  return inbound ? new Date(inbound.created_at).getTime() : null;
+}
+
+/* ---------- boot & views ---------- */
+async function boot() {
+  if (!token()) { showGate(''); return; }
+  try {
+    await api('/guests');
+    document.getElementById('gate').style.display = 'none';
+    document.getElementById('app').style.display = 'block';
+    document.getElementById('conn-status').classList.remove('err');
+    document.getElementById('conn-status').textContent = 'connected';
+    document.getElementById('act-date').value = new Date().toISOString().slice(0,10);
+    switchView('today');
+    setInterval(refreshAll, 15000);
+  } catch {
+    document.getElementById('conn-status').classList.add('err');
+    showGate('Token rejected — check ADMIN_TOKEN in .env');
+  }
+}
+
+function refreshAll() {
+  if (currentView === 'today') loadOverview();
+  else if (currentView === 'guests') { loadGuests(); if (selectedId) refreshDetailQuiet(); }
+  else loadActivities();
+}
+
+function switchView(v) {
+  currentView = v;
+  for (const x of ['today','guests','activities']) {
+    document.getElementById('view-' + x).classList.toggle('active', x === v);
+    document.getElementById('tab-' + x).classList.toggle('active', x === v);
+  }
+  refreshAll();
+}
+
+/* ---------- TODAY ---------- */
+async function loadOverview() {
+  try {
+    const d = await api('/overview');
+    overviewCache = d;
+    const s = d.stats;
+    document.getElementById('today-stats').innerHTML = `
+      <div class="stat green"><div class="n">${d.inHouse.length}</div><div class="l">In the property now</div></div>
+      <div class="stat accent"><div class="n">${d.arrivals.length}</div><div class="l">Arriving today</div></div>
+      <div class="stat amber"><div class="n">${d.departures.length}</div><div class="l">Checking out today</div></div>
+      <div class="stat"><div class="n">${s.sent_today}</div><div class="l">Messages sent today</div></div>
+      <div class="stat"><div class="n">${s.received_today}</div><div class="l">Replies received today</div></div>
+      <div class="stat"><div class="n">${s.activities_today}</div><div class="l">Activities posted today</div></div>`;
+    document.getElementById('c-arrivals').textContent = '(' + d.arrivals.length + ')';
+    document.getElementById('c-departures').textContent = '(' + d.departures.length + ')';
+    document.getElementById('c-inhouse').textContent = '(' + d.inHouse.length + ')';
+    document.getElementById('today-arrivals').innerHTML = peopleList(d.arrivals, 'No arrivals recorded for today.', true);
+    document.getElementById('today-departures').innerHTML = peopleList(d.departures, 'No check-outs today.', false, true);
+    document.getElementById('today-inhouse').innerHTML = peopleList(d.inHouse, 'Nobody in the property right now.', false, false, true);
+  } catch (e) { toast(e.message, true); }
+}
+
+function peopleList(rows, emptyText, checkin, checkout, viewChat) {
+  if (!rows.length) return `<div class="empty">${emptyText}</div>`;
+  return rows.map(g => `
+    <div class="prow">
+      ${avatar(g.name)}
+      <div class="pmain">
+        <div class="pname">${esc(g.name)}</div>
+        <div class="pmeta">+${esc(g.phone)}${g.room ? ' &middot; Room ' + esc(g.room) : ''}</div>
+      </div>
+      ${checkin && ['booked','pre_arrival'].includes(g.journey_state) ? `<button class="btn green small" onclick="doCheckin(${g.id})">Check in</button>` : ''}
+      ${checkout && ['checked_in','in_stay','checkout_pending'].includes(g.journey_state) ? `<button class="btn small" onclick="doCheckout(${g.id})">Check out</button>` : ''}
+      ${viewChat ? `<button class="btn secondary small" onclick="openGuest(${g.id})">Chat</button>` : ''}
+    </div>`).join('');
+}
+
+async function doCheckin(id) {
+  try {
+    await api('/guests/' + id + '/checkin', { method: 'POST' });
+    toast('Guest checked in. Check-in confirmation flow continues automatically.');
+    loadOverview();
+  } catch (e) { toast(e.message, true); }
+}
+async function doCheckout(id) {
+  if (!confirm('Check this guest out? This sends the review request message and moves the journey forward.')) return;
+  try {
+    await api('/guests/' + id + '/checkout', { method: 'POST' });
+    toast('Guest checked out. Review request queued automatically.');
+    loadOverview();
+  } catch (e) { toast(e.message, true); }
+}
+function openGuest(id) { switchView('guests'); selectGuest(id); }
+
+/* ---------- GUESTS ---------- */
+async function loadGuests() {
+  try {
+    guestsCache = await api('/guests');
+    renderGuestList();
+  } catch (e) { document.getElementById('conn-status').textContent = 'error'; }
+}
+
+function renderGuestList() {
+  const q = (document.getElementById('search').value || '').toLowerCase().trim();
+  const rows = guestsCache.filter(g =>
+    !q || g.name.toLowerCase().includes(q) || g.phone.includes(q) || String(g.room||'').toLowerCase().includes(q));
+  document.getElementById('guest-count').textContent = '(' + rows.length + ')';
+  document.getElementById('guest-list').innerHTML = rows.length === 0
+    ? `<div class="empty"><div class="big">No guests found</div>${q ? 'Try a different search.' : 'Add your first guest.'}</div>`
+    : rows.map(g => `
+      <div class="prow clickable ${g.id===selectedId?'selected':''}" onclick="selectGuest(${g.id})">
+        ${avatar(g.name)}
+        <div class="pmain">
+          <div class="pname">${esc(g.name)}
+            ${g.ai_paused ? '<span class="flag-paused">AI PAUSED</span>' : ''}
+            ${g.activities_opt_out ? '<span class="flag-optout">NO ACTIVITIES</span>' : ''}
+          </div>
+          <div class="pmeta">+${esc(g.phone)} &middot; ${g.room ? 'Room ' + esc(g.room) + ' &middot; ' : ''}${fmtDate(g.check_in)} &rarr; ${fmtDate(g.check_out)}</div>
+        </div>
+        ${stateBadge(g.journey_state)}
+      </div>`).join('');
+}
+
+async function selectGuest(id) {
+  selectedId = id;
+  detailTab = 'chat';
+  renderGuestList();
+  await refreshDetail();
+}
+async function refreshDetailQuiet() {
+  const el = document.getElementById('reply-text');
+  if (el && document.activeElement === el) return; // never wipe a message being typed
+  try { await refreshDetail(true); } catch {}
+}
+async function refreshDetail(quiet) {
+  const d = await api('/guests/' + selectedId);
+  const g = d.guest;
+  const card = document.getElementById('detail');
+  const canCheckin = ['booked','pre_arrival'].includes(g.journey_state);
+  const canCheckout = ['checked_in','in_stay','checkout_pending'].includes(g.journey_state);
+  card.innerHTML = `
+    <div class="dhead">
+      ${avatar(g.name, 44)}
+      <div>
+        <div class="pname" style="font-size:15px">${esc(g.name)}</div>
+        <div class="pmeta">+${esc(g.phone)} &middot; guest #${g.id} &middot; proactive today: ${g.proactive_today ?? 0}</div>
+      </div>
+      <div class="dactions">
+        ${canCheckin ? `<button class="btn green small" onclick="doCheckin(${g.id});refreshDetail()">Check in</button>` : ''}
+        ${canCheckout ? `<button class="btn small" onclick="dashboardCheckout(${g.id})">Check out</button>` : ''}
+        <button class="btn ${g.ai_paused?'':'danger'} small" onclick="togglePause(${g.id},${g.ai_paused})">${g.ai_paused?'Resume AI':'Pause AI'}</button>
+        <button class="btn secondary small" onclick="toggleActivities(${g.id},${g.activities_opt_out})">${g.activities_opt_out?'Activities off':'Activities on'}</button>
+      </div>
+    </div>
+    <div class="dtabs">
+      <button class="${detailTab==='chat'?'active':''}" onclick="setTab('chat')">Chat</button>
+      <button class="${detailTab==='profile'?'active':''}" onclick="setTab('profile')">Profile</button>
+      <button class="${detailTab==='journey'?'active':''}" onclick="setTab('journey')">Journey</button>
+    </div>
+    <div class="dbody" id="dbody"></div>`;
+  renderDetailBody(d);
+}
+function setTab(t) {
+  detailTab = t;
+  document.querySelectorAll('.dtabs button').forEach((b,i) => b.classList.toggle('active', ['chat','profile','journey'][i]===t));
+  refreshDetail().catch(()=>{});
+}
+async function dashboardCheckout(id) {
+  if (!confirm('Check this guest out? This sends the review request message.')) return;
+  try { await api('/guests/' + id + '/checkout', { method: 'POST' }); toast('Checked out. Review request queued.'); }
+  catch (e) { toast(e.message, true); }
+  refreshDetail().catch(()=>{});
+  loadGuests();
+}
+
+function renderDetailBody(d) {
+  const g = d.guest;
+  const el = document.getElementById('dbody');
+  if (detailTab === 'chat') el.innerHTML = renderChat(d);
+  else if (detailTab === 'profile') el.innerHTML = renderProfile(g);
+  else el.innerHTML = renderJourney(d);
+}
+
+function renderChat(d) {
+  const msgs = [...d.messages].reverse();
+  const lastIn = lastInboundMs(d.messages);
+  const windowOpen = lastIn && (Date.now() - lastIn < 24*3600*1000);
+  const existing = document.getElementById('reply-text')?.value || '';
+  const bubbles = msgs.length === 0
+    ? '<div class="empty"><div class="big">No messages yet</div>When this guest messages on WhatsApp, the conversation appears here.</div>'
+    : msgs.map(m => m.direction === 'in'
+      ? `<div class="bubble b-in">${esc(m.content)}<div class="bmeta">${fmtTs(m.created_at)}</div></div>`
+      : `<div class="bubble b-out">${m.template_name
+            ? `<span style="font-size:10.5px;font-weight:700;color:var(--accent);display:block;margin-bottom:2px">${esc(m.template_name.replace(/_/g,' '))}</span>` : ''}
+          ${esc(m.content) || '<i style="color:#9ca3af">template message</i>'}
+          <div class="bmeta"><span class="st-${m.status}">${esc(m.status)}</span> &middot; ${fmtTs(m.created_at)}</div>
+          ${m.status==='failed' && m.last_error ? `<div style="font-size:10.5px;color:var(--red);margin-top:3px">${esc(String(m.last_error).slice(0,160))}</div>` : ''}
+        </div>`).join('');
+  return `
+    <div class="chatwrap">${bubbles}</div>
+    <div class="composer">
+      <input class="in" id="reply-text" placeholder="Type a message to this guest…" value="${esc(existing)}" onkeydown="if(event.key==='Enter')sendReply(${d.guest.id})">
+      <button class="btn" onclick="sendReply(${d.guest.id})">Send</button>
+    </div>
+    ${windowOpen ? '' : '<div class="window-note">No guest message in the last 24h — WhatsApp may reject free-text outside the session window. Template messages are unaffected.</div>'}`;
+}
+
+async function sendReply(id) {
+  const input = document.getElementById('reply-text');
+  const content = input.value.trim();
+  if (!content) return;
+  try {
+    await api('/guests/' + id + '/messages', { method: 'POST', body: JSON.stringify({ content }) });
+    input.value = '';
+    refreshDetailQuiet();
+  } catch (e) { toast(e.message, true); }
+}
+
+function renderProfile(g) {
+  return `
+    <div class="form-grid">
+      <div><label class="fl">Full name</label><input class="in" id="f-name" value="${esc(g.name)}"></div>
+      <div><label class="fl">WhatsApp number (with country code)</label><input class="in" id="f-phone" value="${esc(g.phone)}"></div>
+      <div><label class="fl">Room</label><input class="in" id="f-room" value="${esc(g.room||'')}"></div>
+      <div><label class="fl">Journey state (automatic — event driven)</label><input class="in" value="${esc(g.journey_state)}" disabled style="background:#f9fafb"></div>
+      <div><label class="fl">Check-in</label><input type="date" class="in" id="f-checkin" value="${esc(g.check_in||'')}"></div>
+      <div><label class="fl">Check-out</label><input type="date" class="in" id="f-checkout" value="${esc(g.check_out||'')}"></div>
+    </div>
+    <div style="margin-top:16px"><button class="btn" onclick="saveGuest(${g.id})">Save changes</button>
+      <span style="font-size:12px;color:var(--dim);margin-left:10px">Phone changes take effect from the next message.</span></div>`;
+}
+
+function renderJourney(d) {
+  const events = d.events.map(e => `
+    <div class="tl-item">
+      ${e.from_state ? esc(e.from_state) + ' &rarr; ' : ''}<b>${esc(e.to_state)}</b>
+      <span style="color:var(--dim)">(${esc(e.event)})</span>
+      <div class="t">${fmtTs(e.created_at)}${e.detail ? ' &middot; ' + esc(e.detail) : ''}</div>
+    </div>`).join('');
+  const reqs = d.requests.length === 0 ? '<div style="color:var(--dim);font-size:13px">No service requests.</div>' :
+    d.requests.map(r => `<div class="tl-item"><b>${esc(r.request_type)}</b> — ${esc(r.status)} <span style="color:var(--dim)">${esc(r.description||'')}</span><div class="t">${fmtTs(r.created_at)}</div></div>`).join('');
+  return `<div class="section-h">Journey (append-only audit)</div>${events || '<div style="color:var(--dim)">No events yet.</div>'}
+    <div class="section-h">Service requests</div>${reqs}`;
+}
+
+async function saveGuest(id) {
+  const body = {
+    name: document.getElementById('f-name').value,
+    phone: document.getElementById('f-phone').value,
+    room: document.getElementById('f-room').value,
+    check_in: document.getElementById('f-checkin').value || null,
+    check_out: document.getElementById('f-checkout').value || null,
+  };
+  try {
+    await api('/guests/' + id, { method: 'PATCH', body: JSON.stringify(body) });
+    toast('Saved.');
+    loadGuests();
+    refreshDetailQuiet();
+  } catch (e) { toast(e.message, true); }
+}
+
+async function togglePause(id, currently) {
+  try {
+    await api('/guests/' + id, { method: 'PATCH', body: JSON.stringify({ ai_paused: !currently }) });
+    toast(currently ? 'AI resumed — automatic messages will send again.' : 'AI paused — no automatic messages until resumed.');
+    refreshDetailQuiet(); loadGuests();
+  } catch (e) { toast(e.message, true); }
+}
+async function toggleActivities(id, optedOut) {
+  try {
+    await api('/guests/' + id, { method: 'PATCH', body: JSON.stringify({ activities_opt_out: !optedOut }) });
+    toast(optedOut ? 'Activities re-enabled for this guest.' : 'Activities turned off for this guest (they can also text STOP).');
+    refreshDetailQuiet(); loadGuests();
+  } catch (e) { toast(e.message, true); }
+}
+
+function openAdd() {
+  selectedId = null;
+  renderGuestList();
+  detailTab = 'profile';
+  document.getElementById('detail').innerHTML = `
+    <div class="dhead"><div><div class="pname" style="font-size:15px">Add a booking</div>
+      <div class="pmeta">Guest immediately receives the booking confirmation on WhatsApp.</div></div></div>
+    <div class="dbody">
+      <div class="form-grid">
+        <div><label class="fl">Full name *</label><input class="in" id="a-name"></div>
+        <div><label class="fl">WhatsApp number (e.g. 919876543210) *</label><input class="in" id="a-phone"></div>
+        <div><label class="fl">Room</label><input class="in" id="a-room"></div>
+        <div></div>
+        <div><label class="fl">Check-in</label><input type="date" class="in" id="a-checkin"></div>
+        <div><label class="fl">Check-out</label><input type="date" class="in" id="a-checkout"></div>
+      </div>
+      <div style="margin-top:16px"><button class="btn" onclick="addGuest()">Add booking</button></div>
+    </div>`;
+}
+async function addGuest() {
+  const body = {
+    name: document.getElementById('a-name').value,
+    phone: document.getElementById('a-phone').value,
+    room: document.getElementById('a-room').value || null,
+    check_in: document.getElementById('a-checkin').value || null,
+    check_out: document.getElementById('a-checkout').value || null,
+  };
+  try {
+    const r = await api('/guests', { method: 'POST', body: JSON.stringify(body) });
+    toast('Added ' + body.name + ' — booking confirmation is on its way.');
+    loadGuests();
+    selectGuest(r.guestId);
+  } catch (e) { toast(e.message, true); }
+}
+
+/* ---------- ACTIVITIES ---------- */
+async function loadActivities() {
+  try {
+    const rows = await api('/activities');
+    document.getElementById('activity-count').textContent = '(' + rows.length + ')';
+    document.getElementById('activity-list').innerHTML = rows.length === 0
+      ? '<div class="empty"><div class="big">No activities yet</div>Post your first one — in-house guests get it on WhatsApp instantly.</div>'
+      : rows.map(a => `
+        <div class="prow">
+          <div class="pmain">
+            <div class="pname">${esc(a.event_name)} <span style="color:var(--dim);font-weight:400">&middot; ${esc(a.time)} &middot; ${fmtDate(a.date)}</span></div>
+            <div class="pmeta">${esc(a.description || '')}</div>
+          </div>
+          <span class="badge b-checked_in">sent to ${a.sent_count}</span>
+        </div>`).join('');
+  } catch (e) { toast(e.message, true); }
+}
+
+function renderActivityPreview() {
+  const date = document.getElementById('act-date').value;
+  const time = document.getElementById('act-time').value.trim();
+  const name = document.getElementById('act-name').value.trim();
+  const desc = document.getElementById('act-desc').value.trim();
+  const el = document.getElementById('act-preview');
+  if (!date || !time || !name) { el.textContent = 'Fill in the activity to preview the message…'; return; }
+  const day = new Date(date + 'T12:00:00Z').toLocaleDateString('en-IN', { weekday:'long', day:'numeric', month:'short' });
+  el.textContent = `Hi! At Zostel Mumbai on ${day}: ${name} at ${time}.${desc ? ' ' + desc : ''}`;
+}
+
+async function postActivity() {
+  const body = {
+    date: document.getElementById('act-date').value,
+    time: document.getElementById('act-time').value,
+    eventName: document.getElementById('act-name').value,
+    description: document.getElementById('act-desc').value || null,
+  };
+  try {
+    const r = await api('/activities', { method: 'POST', body: JSON.stringify(body) });
+    const sup = r.suppressed.length
+      ? ' Skipped: ' + r.suppressed.map(s => `${s.name} (${s.reason.replace(/_/g,' ')})`).join(', ')
+      : '';
+    toast(`"${r.eventName}" sent to ${r.reached} guest${r.reached===1?'':'s'}.${sup}`);
+    loadActivities();
+  } catch (e) { toast(e.message, true); }
+}
+
+boot();
+</script>
+</body>
+</html>

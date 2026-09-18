@@ -127,11 +127,12 @@ async function maybeQueueProactive(guest, templateName, kind, triggerEvent, asOf
 
 // WhatsApp 24h session window: open if the guest messaged us in the last 24h.
 async function hasOpenSession(guestId, asOf = new Date()) {
+  const since = new Date(asOf.getTime() - 24 * 60 * 60 * 1000);
   const rows = await query(
     `SELECT 1 FROM messages
-     WHERE guest_id = $1 AND direction = 'in' AND created_at > $2 - interval '24 hours'
+     WHERE guest_id = $1 AND direction = 'in' AND created_at > $2
      LIMIT 1`,
-    [guestId, asOf]
+    [guestId, since]
   );
   return rows.length > 0;
 }

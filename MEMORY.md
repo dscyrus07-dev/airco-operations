@@ -254,9 +254,30 @@ Remaining for production (all Meta-side, user actions):
 - Two 'failed' sends in the LOCAL db (ids 21, 22) were dev-mode sandbox
   sends to numbers not on Meta's allowed list — correct fail-visible
   behavior, not a bug. Restriction disappears in Live mode.
-- Security note: Supabase DB password was pasted in chat — rotate it in
-  Supabase dashboard (Settings -> Database) after testing. Same applies
-  to the WhatsApp access token + app secret (still pending).
+- Deploy target decision: Railway for backend+dashboard (single service,
+  serves API + static dashboard), Supabase for data. No Vercel split —
+  the dashboard is static HTML served by Express; splitting adds CORS
+  and sync overhead with zero benefit.
+
+## 2026-09-16 (final) — DEPLOYED: Railway production live
+- What was done:
+  - Local git repo initialized; initial commit 7d24cd1 (40 files, secrets excluded).
+  - Railway CLI linked: project Airco-Operations, environment production,
+    service airco-operations (repo dscyrus07-dev/airco-operations, Southeast Asia).
+  - All 12 app variables pushed via CLI (scripts/push-env.ps1): WhatsApp creds,
+    DATABASE_URL (Supabase pooler), BOOKING_WEBHOOK_SECRET, ADMIN_TOKEN,
+    PROACTIVE_DAILY_CAP=2, TEMPLATE_OVERRIDES. PORT left to Railway injection.
+  - Redeployed with variables -> container started cleanly on :8080.
+  - Meta webhook repointed via API (POST /{app-id}/subscriptions) to
+    https://airco-operations-production.up.railway.app/webhook — active:true,
+    field messages v26.0.
+- Verified: public health endpoint returns {"ok":true,"db":"up","property":"Zostel Mumbai"} (HTTP 200).
+- Production URL: https://airco-operations-production.up.railway.app
+- Dev environment unchanged: local server on :3100 + Docker Postgres still work
+  (note: local .env now points at Supabase, so local dev also uses the cloud DB).
+- Remaining before real guests (user actions in Meta): business verification,
+  production number registration, template approvals, payment method,
+  credential rotation, Live mode switch.
 
 ## 2026-09-16 (end) — Deployment package prepared (Railway)
 - What changed:

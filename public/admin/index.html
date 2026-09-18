@@ -608,7 +608,11 @@ async function addGuest() {
   };
   try {
     const r = await api('/guests', { method: 'POST', body: JSON.stringify(body) });
-    toast('Added ' + body.name + ' — booking confirmation is on its way.');
+    if (r.transitioned === false) {
+      toast(`Guest #${r.guestId} saved, but no confirmation was sent: the guest is already at "${(r.reason||'').replace('invalid_transition:','').split('+')[1] || r.reason}" stage. Booking confirmations only send to new bookings.`);
+    } else {
+      toast('Added ' + body.name + ' — booking confirmation is on its way.');
+    }
     loadGuests();
     selectGuest(r.guestId);
   } catch (e) { toast(e.message, true); }

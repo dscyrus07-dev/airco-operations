@@ -275,9 +275,53 @@ Remaining for production (all Meta-side, user actions):
 - Production URL: https://airco-operations-production.up.railway.app
 - Dev environment unchanged: local server on :3100 + Docker Postgres still work
   (note: local .env now points at Supabase, so local dev also uses the cloud DB).
-- Remaining before real guests (user actions in Meta): business verification,
-  production number registration, template approvals, payment method,
-  credential rotation, Live mode switch.
+- Commits: 7d24cd1 initial, 22dd748 fixes. Railway auto-deploys from GitHub.
+
+## 2026-09-18 — Zostel guest journey upgrade + consent gate (deployed)
+- What was built (commit 887cc28 + fixes):
+  - src/property.js — Zostel Mumbai knowledge (check-in 1PM, checkout 10AM,
+    rules, experiences) for message copy + future Phase 2 Q&A.
+  - New Zostel-style copy for all 5 journey messages (emoji-rich, single
+    source: template bodies double as free-text via renderTemplateBody).
+  - NEW welcome message: fires on check-in DAY morning (10 AM IST tick,
+    self-transition) OR immediately on staff check-in — never both (uniq
+    constraint). journey.js: welcome_tick event + checked_in now carries welcome.
+  - Time-gated ticks (config): pre-arrival 10 AM, welcome 10 AM, checkout
+    reminder 9 AM (Asia/Kolkata).
+  - DUAL-PATH sending: inside the 24h session window -> free_text with the
+    real rendered copy; outside -> template (override on test WABA).
+    template_name stored either way (uniq constraint dedupes both paths).
+  - countProactiveToday now counts ALL proactive sends via
+    trigger_reason LIKE '%:policy_ok' (journey free-text included).
+  - Activity copy upgraded (deterministic): "👀 Today's plan at Zostel
+    Mumbai! / EVENT NAME / 📅 date / 🕘 time / 📍 description" — mirrored
+    exactly in the dashboard preview (WhatsApp bubble style).
+  - Dashboard: per-guest "Next: <communication>" on list rows, journey
+    progress stepper in detail, retry button on failed messages,
+    consent checkbox on Add booking.
+  - Consent gate: guests.whatsapp_opt_in (migration 003); policy blocks ALL
+    proactive without opt-in; guests who message first are auto-consented.
+- VERIFIED live on production (real sends to the owner's phone):
+  booking confirmation (beautiful free-text, delivered) -> welcome (fired
+  automatically via tick, delivered) -> check-in (welcome correctly not
+  duplicated) -> activity broadcast (delivered, in-house only) -> checkout ->
+  review request (delivered). No duplicates. Policy enforced at every step.
+- Bugs fixed during verification:
+  - hasOpenSession used `$2 - interval` (Postgres type error) -> plain
+    timestamp comparison (commit 0f4c444).
+  - Railway env push via PowerShell stripped JSON quotes -> scripts/push-env.js
+    (Node execFileSync, no shell).
+  - Dashboard add-guest now reports honestly when the state machine rejects
+    a duplicate booking_created.
+- Known one-time glitch: the review_request during the walkthrough queued as
+  a template (old variable format) because the checkout request hit the
+  previous Railway container during the consent deploy switchover. Current
+  deployment sends the beautiful free-text review in-window.
+- PROACTIVE_DAILY_CAP restored to 2 after the walkthrough (was 8 temporarily).
+- Pending for production number switch: business verification -> register
+  +91 95195 12345 (new dedicated number, replaces the +1 test number) ->
+  register on Cloud API via API -> create 4 real templates on production
+  WABA -> remove TEMPLATE_OVERRIDES -> switch env vars -> rotate credentials.
 
 ## 2026-09-18 — Production incident fixed: Railway env quoting broke overrides
 - Symptom: production logs showed "TEMPLATE_OVERRIDES set but not valid JSON"

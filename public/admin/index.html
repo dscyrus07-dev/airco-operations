@@ -140,13 +140,20 @@
     box-shadow:0 8px 24px rgba(0,0,0,.25); max-width:380px; animation:tin .18s ease; }
   .toast.err { background:var(--red); }
   @keyframes tin { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:none; } }
-  .preview-box { background:#f9fafb; border:1px dashed var(--line); border-radius:10px; padding:12px 14px;
-    font-size:13px; color:var(--text); line-height:1.5; }
+  .preview-box { background:#dcf8c6; border-radius:4px 14px 14px 14px; padding:12px 14px;
+    font-size:13px; color:#111; line-height:1.5; white-space:pre-wrap; max-width:420px;
+    box-shadow:var(--shadow); font-family:inherit; }
   .preview-label { font-size:11px; font-weight:700; color:var(--dim); text-transform:uppercase;
     letter-spacing:.4px; margin-bottom:6px; }
+  .section-h:first-child { margin-top:0; }
   .section-h { font-size:12px; font-weight:700; color:var(--dim); text-transform:uppercase;
     letter-spacing:.4px; margin:18px 0 8px; }
   .section-h:first-child { margin-top:0; }
+  .jsteps { display:flex; flex-direction:column; gap:2px; margin-bottom:14px; }
+  .jstep { font-size:13px; padding:4px 0; color:var(--dim); }
+  .jstep.done { color:var(--green); font-weight:600; }
+  .jstep.now { color:var(--accent); font-weight:700; }
+  .jstep-arrow { color:#cbd5e1; font-size:11px; padding-left:6px; line-height:1; }
 
   /* ---- gate ---- */
   #gate { max-width:400px; margin:90px auto; padding:28px; background:var(--card);
@@ -405,6 +412,36 @@ async function loadGuests() {
   } catch (e) { document.getElementById('conn-status').textContent = 'error'; }
 }
 
+function istToday() {
+  return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(new Date());
+}
+function nextCommunication(g) {
+  if (g.ai_paused) return 'Automation paused';
+  const today = istToday();
+  const tomorrow = new Date(Date.now() + 24*3600*1000).toISOString().slice(0,10);
+  switch (g.journey_state) {
+    case 'booked':
+      if (g.check_in === today) return 'Welcome message · today 10:00 AM';
+      if (g.check_in) return 'Pre-arrival · ' + fmtDate(addDays(g.check_in, -1)) + ' · 10:00 AM';
+      return 'Awaiting check-in date';
+    case 'pre_arrival':
+      return 'Welcome message · ' + fmtDate(g.check_in) + ' · 10:00 AM';
+    case 'checked_in':
+    case 'in_stay':
+      if (g.check_out && g.check_out === addDays(today, 1)) return 'Checkout reminder · tomorrow 9:00 AM';
+      return 'Activity eligible';
+    case 'checkout_pending':
+      return 'Review request · after checkout';
+    case 'checked_out':
+      return 'Review request';
+    case 'review_requested':
+      return 'Awaiting review';
+    default:
+      return '—';
+  }
+}
+function addDays(iso, n) { const d = new Date(iso + 'T12:00:00Z'); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0,10); }
+
 function renderGuestList() {
   const q = (document.getElementById('search').value || '').toLowerCase().trim();
   const rows = guestsCache.filter(g =>
@@ -421,6 +458,7 @@ function renderGuestList() {
             ${g.activities_opt_out ? '<span class="flag-optout">NO ACTIVITIES</span>' : ''}
           </div>
           <div class="pmeta">+${esc(g.phone)} &middot; ${g.room ? 'Room ' + esc(g.room) + ' &middot; ' : ''}${fmtDate(g.check_in)} &rarr; ${fmtDate(g.check_out)}</div>
+          <div class="pmeta" style="color:var(--accent)">Next: ${esc(nextCommunication(g))}</div>
         </div>
         ${stateBadge(g.journey_state)}
       </div>`).join('');
@@ -499,7 +537,7 @@ function renderChat(d) {
             ? `<span style="font-size:10.5px;font-weight:700;color:var(--accent);display:block;margin-bottom:2px">${esc(m.template_name.replace(/_/g,' '))}</span>` : ''}
           ${esc(m.content) || '<i style="color:#9ca3af">template message</i>'}
           <div class="bmeta"><span class="st-${m.status}">${esc(m.status)}</span> &middot; ${fmtTs(m.created_at)}</div>
-          ${m.status==='failed' && m.last_error ? `<div style="font-size:10.5px;color:var(--red);margin-top:3px">${esc(String(m.last_error).slice(0,160))}</div>` : ''}
+          ${m.status==='failed' && m.last_error ? `<div style="font-size:10.5px;color:var(--red);margin-top:3px">${esc(String(m.last_error).slice(0,160))}</div><button class="btn secondary small" style="margin-top:6px" onclick="retryMessage(${m.id})">Retry</button>` : ''}
         </div>`).join('');
   return `
     <div class="chatwrap">${bubbles}</div>
@@ -536,6 +574,23 @@ function renderProfile(g) {
 }
 
 function renderJourney(d) {
+  const g = d.guest;
+  const has = (tpl) => d.messages.some(m => m.template_name === tpl && ['sent','delivered','read'].includes(m.status));
+  const inHouse = ['checked_in','in_stay','checkout_pending'].includes(g.journey_state);
+  const steps = [
+    { label: 'Booking confirmed', done: has('booking_confirmation') },
+    { label: 'Pre-arrival sent', done: has('checkin_info') },
+    { label: 'Welcome sent', done: has('welcome') },
+    { label: 'Checked in', done: ['checked_in','in_stay','checkout_pending','checked_out','review_requested','closed'].includes(g.journey_state) },
+    { label: 'In-house activities', done: false, active: inHouse && !g.activities_opt_out && !g.ai_paused, note: inHouse ? 'eligible' : '' },
+    { label: 'Checkout reminder', done: has('checkout_reminder') },
+    { label: 'Review request', done: has('review_request') },
+  ];
+  const stepper = steps.map(s => `
+    <div class="tl-item" style="${s.done?'border-left-color:#059669':''}">
+      <b>${s.done ? '✓ ' : s.active ? '→ ' : '○ '}${esc(s.label)}</b>${s.active ? ` <span class="badge b-checked_in">now</span>` : ''}
+      ${s.detail ? `<div class="t">${esc(s.detail)}</div>` : ''}
+    </div>`).join('');
   const events = d.events.map(e => `
     <div class="tl-item">
       ${e.from_state ? esc(e.from_state) + ' &rarr; ' : ''}<b>${esc(e.to_state)}</b>
@@ -544,8 +599,19 @@ function renderJourney(d) {
     </div>`).join('');
   const reqs = d.requests.length === 0 ? '<div style="color:var(--dim);font-size:13px">No service requests.</div>' :
     d.requests.map(r => `<div class="tl-item"><b>${esc(r.request_type)}</b> — ${esc(r.status)} <span style="color:var(--dim)">${esc(r.description||'')}</span><div class="t">${fmtTs(r.created_at)}</div></div>`).join('');
-  return `<div class="section-h">Journey (append-only audit)</div>${events || '<div style="color:var(--dim)">No events yet.</div>'}
+  return `<div class="section-h">Journey progress</div>
+    <div class="jsteps">${steps.map(s => `
+      <div class="jstep ${s.done?'done':s.active?'now':''}">${s.done?'✓':s.active?'→':'○'} ${esc(s.label)}</div>`).join('<div class="jstep-arrow">↓</div>')}</div>
+    <div class="section-h">Audit trail (append-only)</div>${events || '<div style="color:var(--dim)">No events yet.</div>'}
     <div class="section-h">Service requests</div>${reqs}`;
+}
+
+async function retryMessage(id) {
+  try {
+    await api('/messages/' + id + '/retry', { method: 'POST' });
+    toast('Message re-queued and dispatched.');
+    refreshDetailQuiet();
+  } catch (e) { toast(e.message, true); }
 }
 
 async function saveGuest(id) {
@@ -644,7 +710,15 @@ function renderActivityPreview() {
   const el = document.getElementById('act-preview');
   if (!date || !time || !name) { el.textContent = 'Fill in the activity to preview the message…'; return; }
   const day = new Date(date + 'T12:00:00Z').toLocaleDateString('en-IN', { weekday:'long', day:'numeric', month:'short' });
-  el.textContent = `Hi! At Zostel Mumbai on ${day}: ${name} at ${time}.${desc ? ' ' + desc : ''}`;
+  const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(new Date());
+  const lead = date === today ? "Today's plan" : 'Coming up';
+  el.textContent =
+    `👀 ${lead} at Zostel Mumbai!\n\n` +
+    `${name.toUpperCase()}\n` +
+    `📅 ${day}\n` +
+    `🕘 ${time}` +
+    (desc ? `\n📍 ${desc}` : '') +
+    `\n\nCome meet the hostel gang — see you there ✌️`;
 }
 
 async function postActivity() {

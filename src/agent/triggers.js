@@ -2,8 +2,13 @@ import { query } from '../db.js';
 import { transition } from './journey.js';
 import { canSendProactive } from './policy.js';
 import { queueMessage, dispatchPending } from '../messaging/outbound.js';
-import { templateVariables, templateComponents } from '../templates/definitions.js';
+import {
+  templateVariables,
+  templateComponents,
+  renderTemplateBody,
+} from '../templates/definitions.js';
 import { getConfig } from '../config.js';
+import { istHour } from '../property.js';
 
 export function normalizePhone(raw) {
   return String(raw ?? '').replace(/[^\d]/g, '');
@@ -82,9 +87,10 @@ export async function applyEventToGuest(guest, eventName, detail, asOf = new Dat
 async function maybeQueueProactive(guest, templateName, kind, triggerEvent, asOf) {
   const cfg = getConfig();
   const vars = templateVariables(templateName, guest);
-  const [proactiveSentToday, openRequestCount] = await Promise.all([
+  const [proactiveSentToday, openRequestCount, sessionOpen] = await Promise.all([
     countProactiveToday(guest.id, asOf),
     countOpenRequests(guest.id),
+    hasOpenSession(guest.id, asOf),
   ]);
   const decision = canSendProactive({
     guest,
@@ -94,18 +100,40 @@ async function maybeQueueProactive(guest, templateName, kind, triggerEvent, asOf
     cap: cfg.proactiveDailyCap,
   });
   if (!decision.ok) {
-    console.warn(
-      `[policy] suppressed ${templateName} for guest ${guest.id}: ${decision.reason}`
-    );
+    console.warn(`[policy] suppressed ${templateName} for guest ${guest.id}: ${decision.reason}`);
     return null;
+  }
+  const triggerReason = `${triggerEvent}:policy_ok`;
+  // Dual path: inside the 24h session window send the real rendered copy as
+  // free text; outside it, send the (override-mapped) template. template_name
+  // is stored either way so the unique constraint blocks duplicates.
+  if (sessionOpen) {
+    return queueMessage({
+      guestId: guest.id,
+      content: renderTemplateBody(templateName, vars),
+      messageType: 'free_text',
+      templateName,
+      triggerReason,
+    });
   }
   return queueMessage({
     guestId: guest.id,
     messageType: 'template',
     templateName,
     templateComponents: templateComponents(vars),
-    triggerReason: `${triggerEvent}:policy_ok`,
+    triggerReason,
   });
+}
+
+// WhatsApp 24h session window: open if the guest messaged us in the last 24h.
+async function hasOpenSession(guestId, asOf = new Date()) {
+  const rows = await query(
+    `SELECT 1 FROM messages
+     WHERE guest_id = $1 AND direction = 'in' AND created_at > $2 - interval '24 hours'
+     LIMIT 1`,
+    [guestId, asOf]
+  );
+  return rows.length > 0;
 }
 
 export async function countProactiveToday(guestId, asOf) {
@@ -113,7 +141,7 @@ export async function countProactiveToday(guestId, asOf) {
     `SELECT count(*)::int AS n FROM messages
      WHERE guest_id = $1
        AND direction = 'out'
-       AND (message_type = 'template' OR trigger_reason LIKE 'activity:%')
+       AND trigger_reason LIKE '%:policy_ok'
        AND (created_at AT TIME ZONE 'Asia/Kolkata')::date
            = ($2::timestamptz AT TIME ZONE 'Asia/Kolkata')::date`,
     [guestId, asOf]
@@ -167,14 +195,34 @@ export async function handleInboundCommand(guestId, command) {
 }
 
 export async function runDateTick(asOf = new Date()) {
-  const preArrival = await query(
-    `SELECT * FROM guests
-     WHERE journey_state = 'booked'
-       AND check_in = (($1::timestamptz AT TIME ZONE 'Asia/Kolkata')::date + 1)`,
-    [asOf]
-  );
-  for (const g of preArrival) {
-    await applyEventToGuest(g, 'pre_arrival_tick', `date_tick check_in=${g.check_in}`, asOf);
+  const cfg = getConfig();
+  const hour = istHour(asOf);
+
+  // Pre-arrival: check-in is tomorrow; send from the configured morning hour.
+  if (hour >= cfg.preArrivalSendHour) {
+    const preArrival = await query(
+      `SELECT * FROM guests
+       WHERE journey_state = 'booked'
+         AND check_in = (($1::timestamptz AT TIME ZONE 'Asia/Kolkata')::date + 1)`,
+      [asOf]
+    );
+    for (const g of preArrival) {
+      await applyEventToGuest(g, 'pre_arrival_tick', `date_tick check_in=${g.check_in}`, asOf);
+    }
+  }
+
+  // Welcome: on the check-in DAY, from the configured morning hour. Guests
+  // already checked in are skipped by the state machine (no duplicate welcome).
+  if (hour >= cfg.welcomeSendHour) {
+    const welcomeDue = await query(
+      `SELECT * FROM guests
+       WHERE journey_state IN ('booked','pre_arrival')
+         AND check_in = (($1::timestamptz AT TIME ZONE 'Asia/Kolkata')::date)`,
+      [asOf]
+    );
+    for (const g of welcomeDue) {
+      await applyEventToGuest(g, 'welcome_tick', `date_tick check_in=${g.check_in}`, asOf);
+    }
   }
 
   const inStay = await query(
@@ -187,13 +235,15 @@ export async function runDateTick(asOf = new Date()) {
     await applyEventToGuest(g, 'in_stay_tick', `date_tick check_in=${g.check_in}`, asOf);
   }
 
-  const checkoutPending = await query(
-    `SELECT * FROM guests
-     WHERE journey_state IN ('checked_in', 'in_stay')
-       AND check_out = (($1::timestamptz AT TIME ZONE 'Asia/Kolkata')::date + 1)`,
-    [asOf]
-  );
-  for (const g of checkoutPending) {
-    await applyEventToGuest(g, 'checkout_reminder_tick', `date_tick check_out=${g.check_out}`, asOf);
+  if (hour >= cfg.checkoutReminderSendHour) {
+    const checkoutPending = await query(
+      `SELECT * FROM guests
+       WHERE journey_state IN ('checked_in', 'in_stay')
+         AND check_out = (($1::timestamptz AT TIME ZONE 'Asia/Kolkata')::date + 1)`,
+      [asOf]
+    );
+    for (const g of checkoutPending) {
+      await applyEventToGuest(g, 'checkout_reminder_tick', `date_tick check_out=${g.check_out}`, asOf);
+    }
   }
 }

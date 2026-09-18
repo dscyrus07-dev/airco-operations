@@ -248,6 +248,25 @@ export function adminRouter() {
     }
   });
 
+  // Retry a failed message: back to queued, dispatcher picks it up.
+  router.post('/api/messages/:id/retry', async (req, res) => {
+    try {
+      const id = Number(req.params.id);
+      if (!Number.isInteger(id)) return res.status(400).json({ error: 'bad id' });
+      const rows = await query(
+        `UPDATE messages SET status = 'queued', retry_count = 0
+         WHERE id = $1 AND status = 'failed'
+         RETURNING id`,
+        [id]
+      );
+      if (rows.length === 0) return res.status(404).json({ error: 'message not found or not failed' });
+      await dispatchPending();
+      res.json({ ok: true, id: rows[0].id });
+    } catch (err) {
+      res.status(400).json({ error: err.message });
+    }
+  });
+
   router.get('/api/activities', async (_req, res, next) => {
     try {
       res.json(await listActivities());

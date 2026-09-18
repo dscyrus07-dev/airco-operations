@@ -23,10 +23,20 @@ export const EVENTS = {
     message: 'checkin_info',
     messageKind: 'journey',
   },
+  // Fires on the check-in DAY (morning tick). Self-transition: the state only
+  // moves to checked_in when staff actually checks the guest in — but if the
+  // guest is checked in first, this tick is rejected (no duplicate welcome;
+  // the uniq constraint also protects the message itself).
+  welcome_tick: {
+    from: ['booked', 'pre_arrival'],
+    to: 'self',
+    message: 'welcome',
+    messageKind: 'journey',
+  },
   checked_in: {
     from: ['booked', 'pre_arrival'],
     to: 'checked_in',
-    message: null,
+    message: 'welcome',
     messageKind: 'journey',
   },
   in_stay_tick: {
@@ -63,7 +73,7 @@ export function transition(currentState, eventName) {
   }
   return {
     ok: true,
-    to: ev.to,
+    to: ev.to === 'self' ? currentState : ev.to,
     message: ev.message,
     messageKind: ev.messageKind,
   };

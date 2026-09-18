@@ -7,15 +7,26 @@ import { getConfig } from '../config.js';
 // Guests physically at the property — activity broadcasts target these.
 const IN_PROPERTY_STATES = ['checked_in', 'in_stay', 'checkout_pending'];
 
+function istToday() {
+  return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(new Date());
+}
+
+// Deterministic activity rendering — engaging but never LLM-generated (Phase 1).
 function formatMessage(a, property) {
   const date = new Date(`${a.date}T12:00:00Z`).toLocaleDateString('en-IN', {
     weekday: 'long',
     day: 'numeric',
     month: 'short',
   });
-  return `Hi! At ${property} on ${date}: ${a.event_name} at ${a.time}.${
-    a.description ? ` ${a.description}` : ''
-  }`;
+  const lead = a.date === istToday() ? "Today's plan" : 'Coming up';
+  return (
+    `👀 ${lead} at ${property}!\n\n` +
+    `${a.event_name.toUpperCase()}\n` +
+    `📅 ${date}\n` +
+    `🕘 ${a.time}` +
+    (a.description ? `\n📍 ${a.description}` : '') +
+    `\n\nCome meet the hostel gang — see you there ✌️`
+  );
 }
 
 // Community manager posts one activity; it is offered to every in-property

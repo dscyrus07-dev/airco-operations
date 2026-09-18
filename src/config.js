@@ -31,6 +31,10 @@ export function loadConfig(env = process.env) {
     timezone: 'Asia/Kolkata',
     property: 'Zostel Mumbai',
     proactiveDailyCap: Number(env.PROACTIVE_DAILY_CAP || 2),
+    // Scheduled send times (Asia/Kolkata). Configurable, not hardcoded in logic.
+    preArrivalSendHour: Number(env.PRE_ARRIVAL_SEND_HOUR ?? 10),
+    welcomeSendHour: Number(env.WELCOME_SEND_HOUR ?? 10),
+    checkoutReminderSendHour: Number(env.CHECKOUT_REMINDER_SEND_HOUR ?? 9),
     testRecipientNumber: String(env.TEST_RECIPIENT_NUMBER || '').trim(),
   };
 }

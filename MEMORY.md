@@ -279,6 +279,30 @@ Remaining for production (all Meta-side, user actions):
   production number registration, template approvals, payment method,
   credential rotation, Live mode switch.
 
+## 2026-09-18 — Production incident fixed: Railway env quoting broke overrides
+- Symptom: production logs showed "TEMPLATE_OVERRIDES set but not valid JSON"
+  -> template sends fell through to real template names -> #132001 failures;
+  review_request stuck failed.
+- Root cause: PowerShell stripped the double quotes from the JSON value when
+  pushing variables via the CLI (PowerShell -> npm .ps1 wrapper -> node arg
+  mangling).
+- Fixes:
+  - scripts/push-env.js — Node execFileSync pusher (no shell), JSON survives.
+    All 12 vars re-pushed, verified intact on Railway.
+  - scripts/retry-message.js — reset a failed message to queued (ops tool).
+  - Dashboard: add-guest now reports honestly when the state machine rejects
+    booking_created (guest already past booked stage) instead of claiming
+    a confirmation was sent.
+  - Rescued message 12 (review_request): reset -> dispatched via override ->
+    delivered. Journey: checked_out -> review_requested.
+- Explained (not bugs): "Re-engagement message" failures on staff_manual
+  "Hii" sends = WhatsApp 24h session window closed; free-text outside it is
+  rejected by design (dashboard warns). Re-engagement past 24h needs an
+  approved template (post business-verification).
+- Duplicate-suppressed booking_confirmation for guest 1 = unique constraint
+  working as designed.
+- Commits: 7d24cd1 initial, 22dd748 fixes. Railway auto-deploys from GitHub.
+
 ## 2026-09-16 (end) — Deployment package prepared (Railway)
 - What changed:
   - server.js: process-level safety — unhandledRejection logged (agent stays up),

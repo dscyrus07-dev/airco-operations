@@ -31,13 +31,14 @@ export async function handleBookingWebhook(b) {
   const name = String(b?.name ?? '').trim();
   if (!name) throw new Error('booking webhook: name is required');
   const rows = await query(
-    `INSERT INTO guests (phone, name, property, room, check_in, check_out, journey_state)
-     VALUES ($1, $2, $3, $4, $5, $6, 'booked')
+    `INSERT INTO guests (phone, name, property, room, check_in, check_out, journey_state, whatsapp_opt_in)
+     VALUES ($1, $2, $3, $4, $5, $6, 'booked', $7)
      ON CONFLICT (phone) DO UPDATE SET
        name = EXCLUDED.name,
        room = EXCLUDED.room,
        check_in = EXCLUDED.check_in,
-       check_out = EXCLUDED.check_out
+       check_out = EXCLUDED.check_out,
+       whatsapp_opt_in = EXCLUDED.whatsapp_opt_in
      RETURNING *`,
     [
       phone,
@@ -46,6 +47,7 @@ export async function handleBookingWebhook(b) {
       b?.room ?? null,
       normalizeDate(b?.check_in),
       normalizeDate(b?.check_out),
+      b?.whatsapp_opt_in === true || b?.whatsapp_opt_in === 'true',
     ]
   );
   return rows[0];

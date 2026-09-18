@@ -660,10 +660,17 @@ function openAdd() {
         <div></div>
         <div><label class="fl">Check-in</label><input type="date" class="in" id="a-checkin"></div>
         <div><label class="fl">Check-out</label><input type="date" class="in" id="a-checkout"></div>
+        <div class="full" style="margin-top:4px">
+          <label style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text);cursor:pointer">
+            <input type="checkbox" id="a-optin" checked style="width:auto">
+            Guest has agreed to receive WhatsApp updates from Zostel Mumbai (required for automated messages)
+          </label>
+        </div>
       </div>
       <div style="margin-top:16px"><button class="btn" onclick="addGuest()">Add booking</button></div>
     </div>`;
 }
+
 async function addGuest() {
   const body = {
     name: document.getElementById('a-name').value,
@@ -671,6 +678,7 @@ async function addGuest() {
     room: document.getElementById('a-room').value || null,
     check_in: document.getElementById('a-checkin').value || null,
     check_out: document.getElementById('a-checkout').value || null,
+    whatsapp_opt_in: document.getElementById('a-optin').checked,
   };
   try {
     const r = await api('/guests', { method: 'POST', body: JSON.stringify(body) });

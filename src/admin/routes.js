@@ -139,6 +139,10 @@ export function adminRouter() {
       if (b.ai_paused !== undefined) updates.ai_paused = b.ai_paused === true || b.ai_paused === 'true';
       if (b.activities_opt_out !== undefined)
         updates.activities_opt_out = b.activities_opt_out === true || b.activities_opt_out === 'true';
+      if (b.whatsapp_opt_in !== undefined)
+        updates.whatsapp_opt_in = b.whatsapp_opt_in === true || b.whatsapp_opt_in === 'true';
+      if (b.activities_opt_out !== undefined)
+        updates.activities_opt_out = b.activities_opt_out === true || b.activities_opt_out === 'true';
 
       if (Object.keys(updates).length === 0) return res.status(400).json({ error: 'nothing to update' });
 

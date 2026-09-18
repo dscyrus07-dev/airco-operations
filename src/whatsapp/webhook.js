@@ -56,8 +56,8 @@ async function processInbound(value) {
     guestId = existing[0].id;
   } else {
     const inserted = await query(
-      `INSERT INTO guests (phone, name, property)
-       VALUES ($1, $2, 'Zostel Mumbai')
+      `INSERT INTO guests (phone, name, property, whatsapp_opt_in)
+       VALUES ($1, $2, 'Zostel Mumbai', TRUE)
        RETURNING id`,
       [waId, profileName || `Guest ${waId.slice(-4)}`]
     );

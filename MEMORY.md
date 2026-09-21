@@ -1,3 +1,29 @@
+
+## 2026-09-21 — Twilio WhatsApp provider (dual-transport) + production WABA state
+- Meta production blockers (both WABAs): SMB phone registration + template
+  management blocked server-side (error 2494160 templates, 133010 send,
+  request_code outage). Numbers added via Business Manager get platform_type
+  ON_PREMISE + code_verification_status NOT_VERIFIED — embedded signup via the
+  app's API Setup page is the only fix, blocked by Meta server outage.
+- Solution: dual-provider transport. WHATSAPP_PROVIDER=meta|twilio switches
+  transport; journey engine/policy/dashboard unchanged (commit ad34478, 35 tests).
+- Twilio: Account AC***redacted*** (TRIAL). Tryout sender
+  whatsapp:+17372508034. Tryout blocks free-form API sends (21654) — ALL sends
+  must use ContentSid. Sample template HXfe5ab5f00277942d4d4200328b4d403c mapped
+  to all 5 journey templates via TWILIO_CONTENT_SIDS (guests see Twilio sample
+  text, not Zostel copy, until account upgraded + real Content templates made).
+- VERIFIED LIVE: booking → confirmation delivered, check-in → welcome delivered
+  (Twilio status read/delivered) for +918591994761 (sandbox-joined).
+- Webhook: POST /webhook/twilio (urlencoded, X-Twilio-Signature HMAC-SHA1,
+  trust proxy). User must set sandbox 'When a message comes in' + status
+  callback to https://airco-operations-production.up.railway.app/webhook/twilio.
+- Meta creds kept in env for instant switch-back (WHATSAPP_PROVIDER=meta):
+  new Airco app 1792503015091165, WABA 3682892138525203 (verified), phone
+  1382430381612866 (+91 85919 94761, NOT_VERIFIED/ON_PREMISE — broken).
+  Old prod WABA 2035908973733316 + 8879731627 also NOT_VERIFIED.
+- Gotchas: push-env.js skips empty values — clearing a var needs explicit
+  'railway variables --set KEY='. Railway service name: airco-operations.
+
 # MEMORY.md — Airco Agent
 
 Read this at the start of every session before touching code.

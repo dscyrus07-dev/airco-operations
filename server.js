@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { loadConfig } from './src/config.js';
 import { verifySignature } from './src/whatsapp/signature.js';
 import { handleVerification, handleEvent } from './src/whatsapp/webhook.js';
+import { handleTwilioEvent, verifyTwilioSignature } from './src/whatsapp/twilio-webhook.js';
 import { adminRouter } from './src/admin/routes.js';
 import {
   handleBookingWebhook,
@@ -16,6 +17,8 @@ import { query, closePool } from './src/db.js';
 
 const config = loadConfig();
 const app = express();
+
+app.set('trust proxy', true); // behind Railway proxy — correct req.protocol/hostname for Twilio signatures
 
 app.use(
   express.json({
@@ -54,6 +57,20 @@ app.post('/webhook', rateLimit(), (req, res) => {
   }
   handleEvent(req.body).catch((err) => console.error('[webhook] processing error:', err));
   res.status(200).json({ received: true });
+});
+
+// Twilio WhatsApp inbound + status callbacks (form-encoded)
+app.post('/webhook/twilio', express.urlencoded({ extended: false, limit: '1mb' }), rateLimit(), (req, res) => {
+  const params = req.body ?? {};
+  const signature = req.headers['x-twilio-signature'];
+  const url = `${req.protocol}://${req.get('host')}${req.originalUrl}`;
+  const authToken = config.twilioAuthToken;
+  if (authToken && !verifyTwilioSignature(authToken, signature, url, params)) {
+    console.warn('[twilio] rejected POST: invalid X-Twilio-Signature');
+    return res.status(401).json({ error: 'invalid signature' });
+  }
+  handleTwilioEvent(params).catch((err) => console.error('[twilio] processing error:', err));
+  res.status(200).type('text/xml').send('<Response/>');
 });
 
 app.post('/webhooks/booking', rateLimit(), async (req, res) => {

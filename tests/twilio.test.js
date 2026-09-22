@@ -1,7 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
-import { verifyTwilioSignature, classifyTwilioEvent } from '../src/whatsapp/twilio-webhook.js';
+import { classifyTwilioEvent } from '../src/whatsapp/webhook.js';
+import { verifyTwilioSignature } from '../src/whatsapp/signature.js';
 
 const authToken = 'test-twilio-auth-token';
 const url = 'https://airco-operations-production.up.railway.app/webhook/twilio';

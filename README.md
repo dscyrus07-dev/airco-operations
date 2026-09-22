@@ -18,11 +18,11 @@ npm start                     # listens on :3100 (3000 is used by your other pro
 
 | Variable | Notes |
 |---|---|
-| WHATSAPP_ACCESS_TOKEN | Permanent token from a Meta System User (not the 24h dashboard token) |
-| WHATSAPP_PHONE_NUMBER_ID | Send endpoint ID |
-| WHATSAPP_APP_SECRET | App Settings → Basic → App Secret (webhook signature verification) |
-| WHATSAPP_VERIFY_TOKEN | Any string you choose; also paste it into Meta's webhook config |
-| WHATSAPP_WABA_ID | WhatsApp Business Account ID |
+| TWILIO_ACCOUNT_SID | Twilio Console → Account Info |
+| TWILIO_AUTH_TOKEN | Twilio Console → Auth Token |
+| TWILIO_WHATSAPP_FROM | WhatsApp sender, e.g. whatsapp:+14155238886 |
+| TWILIO_STATUS_CALLBACK | Public URL for delivery statuses (/webhook) |
+| TWILIO_CONTENT_SIDS | Map of journey template name → approved ContentSid (HX...) |
 | DATABASE_URL | Local default matches docker-compose.yml |
 | BOOKING_WEBHOOK_SECRET | Shared secret for the stubbed PMS webhooks |
 | TEST_RECIPIENT_NUMBER | Your test phone, digits only (e.g. 919876543210) |
@@ -42,7 +42,6 @@ npm start                     # listens on :3100 (3000 is used by your other pro
 - `npm run demo` — full Phase 1 flow locally in dry-run mode (no real WhatsApp
   sends): booking → pre-arrival → check-in → checkout reminder → checkout → review
   request. Asserts all 4 messages fire in order.
-- `npm run send-test` — Milestone: one real message to TEST_RECIPIENT_NUMBER.
 - `npm run simulate -- booking|checkin|checkout --phone ...` — fire the stubbed
   webhooks against a running server.
 

@@ -2,9 +2,8 @@ import express from 'express';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { loadConfig } from './src/config.js';
-import { verifySignature } from './src/whatsapp/signature.js';
-import { handleVerification, handleEvent } from './src/whatsapp/webhook.js';
-import { handleTwilioEvent, verifyTwilioSignature } from './src/whatsapp/twilio-webhook.js';
+import { handleTwilioEvent } from './src/whatsapp/webhook.js';
+import { verifyTwilioSignature } from './src/whatsapp/signature.js';
 import { adminRouter } from './src/admin/routes.js';
 import {
   handleBookingWebhook,
@@ -45,31 +44,16 @@ function rateLimit({ max = 100, windowMs = 60_000 } = {}) {
   };
 }
 
-app.get('/webhook', (req, res) => {
-  const result = handleVerification(req.query, config.whatsappVerifyToken);
-  res.status(result.status).send(result.body);
-});
-
-app.post('/webhook', rateLimit(), (req, res) => {
-  if (!verifySignature(req.rawBody, req.headers['x-hub-signature-256'], config.whatsappAppSecret)) {
-    console.warn('[webhook] rejected POST: invalid X-Hub-Signature-256');
-    return res.status(401).json({ error: 'invalid signature' });
-  }
-  handleEvent(req.body).catch((err) => console.error('[webhook] processing error:', err));
-  res.status(200).json({ received: true });
-});
-
 // Twilio WhatsApp inbound + status callbacks (form-encoded)
-app.post('/webhook/twilio', express.urlencoded({ extended: false, limit: '1mb' }), rateLimit(), (req, res) => {
+app.post('/webhook', express.urlencoded({ extended: false, limit: '1mb' }), rateLimit(), (req, res) => {
   const params = req.body ?? {};
   const signature = req.headers['x-twilio-signature'];
   const url = `${req.protocol}://${req.get('host')}${req.originalUrl}`;
-  const authToken = config.twilioAuthToken;
-  if (authToken && !verifyTwilioSignature(authToken, signature, url, params)) {
-    console.warn('[twilio] rejected POST: invalid X-Twilio-Signature');
+  if (!verifyTwilioSignature(config.twilioAuthToken, signature, url, params)) {
+    console.warn('[webhook] rejected POST: invalid X-Twilio-Signature');
     return res.status(401).json({ error: 'invalid signature' });
   }
-  handleTwilioEvent(params).catch((err) => console.error('[twilio] processing error:', err));
+  handleTwilioEvent(params).catch((err) => console.error('[webhook] processing error:', err));
   res.status(200).type('text/xml').send('<Response/>');
 });
 

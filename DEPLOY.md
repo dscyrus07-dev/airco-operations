@@ -37,12 +37,11 @@ Never commit `.env` — it is already gitignored.
 1. Go to **railway.app** → log in with GitHub → **New Project → Deploy from GitHub repo** → pick the repo.
 2. Railway detects Node.js automatically. Settings → **Start Command**: `node server.js` (already in package.json).
 3. **Variables** tab → add every variable from your local `.env`:
-   - `WHATSAPP_ACCESS_TOKEN` (the permanent System User token — never the 24h dashboard token)
-   - `WHATSAPP_PHONE_NUMBER_ID`
-   - `WHATSAPP_APP_SECRET`
-   - `WHATSAPP_VERIFY_TOKEN` (same value as local)
-   - `WHATSAPP_WABA_ID`
-   - `WHATSAPP_APP_ID`
+   - TWILIO_ACCOUNT_SID
+   - TWILIO_AUTH_TOKEN
+   - TWILIO_WHATSAPP_FROM
+   - TWILIO_STATUS_CALLBACK
+   - TWILIO_CONTENT_SIDS
    - `DATABASE_URL` (the Supabase pooler string)
    - `PORT` (Railway sets its own — delete this var and let Railway inject it, or set 3100)
    - `BOOKING_WEBHOOK_SECRET`
@@ -68,7 +67,7 @@ skip unless you create a new Supabase project.
 
 1. **developers.facebook.com** → app **Zostel(mumbai) AI** → **WhatsApp → Configuration**
 2. Callback URL: `https://<your-railway-domain>/webhook`
-3. Verify token: the same `WHATSAPP_VERIFY_TOKEN` value you set in Railway
+3. Webhook: set the WhatsApp sender webhook to this URL in the Twilio console (Messaging > Senders > WhatsApp sender > webhook URL)
 4. Subscribe to the `messages` field (already subscribed — verify it shows Subscribed)
 5. Test: send a message to the test number; check Railway logs for the webhook POST.
 
@@ -89,7 +88,7 @@ skip unless you create a new Supabase project.
 
 - [ ] Business verification for Exquisite Hospitality (Meta dashboard)
 - [ ] Register production number +91 88797 31627 on Cloud API (SMS code; number becomes API-only)
-- [ ] Create the 4 real templates on the production WABA (`npm run create-templates` with the production WABA ID)
+- [ ] Create the 5 journey Content templates in Twilio (Content Builder) and map them in TWILIO_CONTENT_SIDS
 - [ ] Add payment method for business-initiated (template) messages
 - [ ] Rotate WhatsApp access token + app secret; rotate Supabase DB password
 - [ ] Set real `REVIEW_URL` in the environment

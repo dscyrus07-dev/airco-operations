@@ -1,6 +1,5 @@
 import { query } from '../db.js';
 import { sendText, sendTemplate, isRetryableError } from '../whatsapp/client.js';
-import { templateOverride } from '../templates/definitions.js';
 
 const MAX_ATTEMPTS = 5;
 const BACKOFF_MS = [1000, 2000, 4000, 8000, 16000];
@@ -60,15 +59,9 @@ async function sendWithRetry(msg) {
       await sleep(BACKOFF_MS[Math.min(attempt - 1, BACKOFF_MS.length - 1)]);
     }
     try {
-      const override = templateOverride(msg.template_name, msg);
       const res =
         msg.message_type === 'template'
-          ? await sendTemplate(
-              msg.phone,
-              override?.name ?? msg.template_name,
-              override?.language ?? 'en',
-              override?.components ?? msg.template_components ?? []
-            )
+          ? await sendTemplate(msg.phone, msg.template_name, 'en', msg.template_components ?? [])
           : await sendText(msg.phone, msg.content);
       await query(
         `UPDATE messages SET status = 'sent', wa_message_id = $1, updated_at = now() WHERE id = $2`,

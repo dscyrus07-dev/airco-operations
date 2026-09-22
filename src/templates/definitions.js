@@ -115,26 +115,3 @@ export function templateComponents(vars) {
     },
   ];
 }
-
-// TEST-ONLY: Meta test WhatsApp Business Accounts auto-reject custom template
-// submissions, so on a test WABA sends can be remapped to Meta's pre-approved
-// sample templates via TEMPLATE_OVERRIDES. Never set this in production.
-// Example: TEMPLATE_OVERRIDES={"booking_confirmation":{"name":"jaspers_market_order_confirmation_v1","language":"en_US","vars":["guest_name","guest_id","check_in"]}}
-export function templateOverride(name, ctx) {
-  const raw = process.env.TEMPLATE_OVERRIDES;
-  if (!raw) return null;
-  let map;
-  try {
-    map = JSON.parse(raw);
-  } catch {
-    console.warn('[templates] TEMPLATE_OVERRIDES set but not valid JSON — ignoring');
-    return null;
-  }
-  const o = map?.[name];
-  if (!o?.name) return null;
-  const vars = (o.vars ?? []).map((k) => String(ctx[k] ?? ''));
-  console.warn(
-    `[templates] TEST OVERRIDE: sending ${name} as ${o.name}/${o.language ?? 'en'} (vars: ${(o.vars ?? []).join(',')})`
-  );
-  return { name: o.name, language: o.language ?? 'en', components: templateComponents(vars) };
-}

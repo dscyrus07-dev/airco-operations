@@ -553,7 +553,10 @@ async function boot() {
     document.getElementById('conn-status').textContent = 'connected';
     document.getElementById('act-date').value = istToday();
     switchView('today');
-    setInterval(refreshAll, 15000);
+    setInterval(() => {
+      if (document.hidden) return; // never poll a hidden tab
+      refreshAll();
+    }, 30000);
   } catch {
     document.getElementById('conn-status').classList.add('err');
     showGate('Token rejected — check ADMIN_TOKEN in .env');

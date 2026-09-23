@@ -1,7 +1,7 @@
 import { query } from '../db.js';
 import { canSendProactive } from './policy.js';
 import { queueMessage, dispatchPending } from '../messaging/outbound.js';
-import { countProactiveToday, countOpenRequests, normalizeDate } from './triggers.js';
+import { normalizeDate } from './triggers.js';
 import { getConfig } from '../config.js';
 
 // Guests physically at the property — activity broadcasts target these.
@@ -55,18 +55,38 @@ async function broadcast(activity) {
      WHERE journey_state = ANY($1) AND archived = FALSE`,
     [IN_PROPERTY_STATES]
   );
+  if (guests.length === 0) return { queued: [], suppressed: [] };
+
+  // Batch the per-guest policy inputs into two queries instead of 2N
+  // round trips — the broadcast stays fast at 30+ guests.
+  const ids = guests.map((g) => g.id);
+  const [sentRows, reqRows] = await Promise.all([
+    query(
+      `SELECT guest_id, count(*)::int AS n FROM messages
+       WHERE guest_id = ANY($1) AND direction = 'out'
+         AND trigger_reason LIKE '%:policy_ok'
+         AND (created_at AT TIME ZONE 'Asia/Kolkata')::date
+             = (now() AT TIME ZONE 'Asia/Kolkata')::date
+       GROUP BY guest_id`,
+      [ids]
+    ),
+    query(
+      `SELECT guest_id, count(*)::int AS n FROM requests
+       WHERE guest_id = ANY($1) AND status = 'open'
+       GROUP BY guest_id`,
+      [ids]
+    ),
+  ]);
+  const sentMap = new Map(sentRows.rows.map((r) => [r.guest_id, r.n]));
+  const openReqMap = new Map(reqRows.rows.map((r) => [r.guest_id, r.n]));
 
   const queued = [];
   const suppressed = [];
   for (const g of guests) {
-    const [sentToday, openRequests] = await Promise.all([
-      countProactiveToday(g.id, new Date()),
-      countOpenRequests(g.id),
-    ]);
     const decision = canSendProactive({
       guest: g,
-      proactiveSentToday: sentToday,
-      openRequestCount: openRequests,
+      proactiveSentToday: sentMap.get(g.id) ?? 0,
+      openRequestCount: openReqMap.get(g.id) ?? 0,
       kind: 'activity',
       cap: cfg.proactiveDailyCap,
     });
@@ -121,42 +141,7 @@ export async function broadcastActivityById(id) {
   const activity = rows[0];
   if (activity.sent_at) throw new Error('activity was already sent');
 
-  const cfg = getConfig();
-  const guests = await query(
-    `SELECT id, name, phone, journey_state, ai_paused, activities_opt_out
-     FROM guests
-     WHERE journey_state = ANY($1) AND archived = FALSE`,
-    [IN_PROPERTY_STATES]
-  );
-
-  const queued = [];
-  const suppressed = [];
-  for (const g of guests) {
-    const [sentToday, openRequests] = await Promise.all([
-      countProactiveToday(g.id, new Date()),
-      countOpenRequests(g.id),
-    ]);
-    const decision = canSendProactive({
-      guest: g,
-      proactiveSentToday: sentToday,
-      openRequestCount: openRequests,
-      kind: 'activity',
-      cap: cfg.proactiveDailyCap,
-    });
-    if (!decision.ok) {
-      suppressed.push({ guestId: g.id, name: g.name, reason: decision.reason });
-      console.warn(`[activity ${activity.id}] suppressed for guest ${g.id}: ${decision.reason}`);
-      continue;
-    }
-    const msg = await queueMessage({
-      guestId: g.id,
-      content: formatMessage(activity, cfg.property),
-      messageType: 'free_text',
-      triggerReason: `activity:${activity.id}:policy_ok`,
-    });
-    if (msg) queued.push({ guestId: g.id, name: g.name });
-  }
-
+  const { queued, suppressed } = await broadcast(activity);
   await dispatchPending();
   await query(`UPDATE activities SET status = 'active', sent_at = now() WHERE id = $1`, [id]);
   return {

@@ -287,6 +287,7 @@
   .empty .act { margin-top:12px; }
   .preview-box { background:#dcf8c6; border-radius:4px 14px 14px 14px; padding:12px 14px;
     font-size:13px; color:#111; line-height:1.5; white-space:pre-wrap; max-width:420px; box-shadow:var(--shadow); }
+  .audience-box { background:#f9fafb; border:1px solid var(--line); border-radius:10px; padding:10px 13px; margin-top:10px; font-size:13px; color:var(--text); }
   .preview-label { font-size:11px; font-weight:700; color:var(--dim); text-transform:uppercase;
     letter-spacing:.4px; margin-bottom:6px; }
   .section-h { font-size:11.5px; font-weight:700; color:var(--dim); text-transform:uppercase;
@@ -406,6 +407,10 @@
           <div style="margin-top:14px">
             <div class="preview-label">Guests will receive</div>
             <div class="preview-box" id="act-preview">Fill in the activity to preview the message…</div>
+          </div>
+          <div style="margin-top:14px">
+            <div class="preview-label">Audience — in-house guests right now</div>
+            <div id="act-audience" class="audience-box"></div>
           </div>
           <div style="margin-top:14px;display:flex;align-items:center;gap:10px;flex-wrap:wrap">
             <button class="btn" id="act-send-btn" onclick="postActivity(true)">Send to in-house guests</button>
@@ -598,6 +603,12 @@ function renderPulse(d) {
   const headline = total === 0 ? 'Property is quiet — everything handled ✨'
     : allDone ? "All of today's operations are handled ✨"
     : `${done} of ${total} guest journeys handled today`;
+  const items = [
+    { ok: arrivals === 0 || arrivalsDone === arrivals, pi: arrivals ? (arrivalsDone === arrivals ? '✓' : `${arrivalsDone}/${arrivals}`) : '✓', label: arrivals ? 'Arrivals handled' : 'No arrivals' },
+    { ok: departures === 0 || departuresDone === departures, pi: departures ? `${departuresDone}/${departures}` : '✓', label: departures ? 'Checkouts done' : 'No checkouts' },
+    { ok: d.stats.activities_today > 0, pi: d.stats.activities_today > 0 ? '✓' : '0', label: `${d.stats.activities_today} activities posted` },
+    { ok: d.stats.sent_today > 0, pi: d.stats.sent_today > 0 ? '✓' : '0', label: `${d.stats.sent_today} messages sent` },
+  ];
   document.getElementById('ops-pulse').innerHTML = `
     <div class="pulse-head">
       <span class="pulse-title">TODAY'S OPERATIONS</span>
@@ -606,12 +617,9 @@ function renderPulse(d) {
     </div>
     <div class="pulse-bar"><div class="pulse-fill" style="width:${pct}%"></div></div>
     <div class="pulse-grid">
-      <div class="pulse-item ${arrivals ? (arrivalsDone ? 'ok' : 'wait') : 'ok'}">
-        <span class="pi">${arrivals ? (arrivalsDone ? '✓' : arrivals) : '✓'}</span><span class="pl">Arrivals ${arrivalsDone ? 'handled' : 'pending'}</span></div>
-      <div class="pulse-item ${departures ? (departuresDone ? 'ok' : 'wait') : 'ok'}">
-        <span class="pi">${departures ? departuresDone + '/' + departures : '✓'}</span><span class="pl">Checkouts</span></div>
-      <div class="pulse-item ${d.stats.activities_today ? 'ok' : 'ok'}"><span class="pi">${d.stats.activities_today}</span><span class="pl">activities posted</span></div>
-      <div class="pulse-item"><span class="pi">${d.stats.sent_today}</span><span class="pl">messages sent</span></div>
+      ${items.map(it => `
+        <div class="pulse-item ${it.ok ? 'ok' : 'wait'}">
+          <span class="pi">${it.pi}</span><span class="pl">${esc(it.label)}</span></div>`).join('')}
     </div>`;
 }
 
@@ -1143,11 +1151,23 @@ async function cancelActivity(id) {
   } catch (e) { toast(e.message, true); }
 }
 
+function renderActivityAudience() {
+  const IN_HOUSE = ['checked_in','in_stay','checkout_pending'];
+  const house = guestsCache.filter(g => IN_HOUSE.includes(g.journey_state));
+  const willGet = house.filter(g => !g.ai_paused && !g.activities_opt_out);
+  const skipped = house.length - willGet.length;
+  const el = document.getElementById('act-audience');
+  if (!el) return;
+  const names = willGet.map(g => esc(g.name)).join(", ") || "—";
+  const skip = skipped ? '<div style="font-size:11.5px;color:var(--amber);margin-top:4px">' + skipped + ' skipped (AI paused / activities off / daily cap)</div>' : '';
+  el.innerHTML = '<div style="font-size:13px"><b>' + willGet.length + ' guest' + (willGet.length===1?'':'s') + '</b> will receive this: ' + esc(names) + skip + '</div>';
+}
+
 /* ---------- ACTIVITIES ---------- */
 async function loadActivities() {
   try {
     activitiesCache = await api('/activities');
-    renderActivityFilters();
+    renderActivityAudience();
     renderActivityList();
   } catch (e) { toast(e.message, true); }
 }

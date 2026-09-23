@@ -121,7 +121,10 @@
   .pulse-item.ok .pi { color:var(--green); } .pulse-item.wait .pi { color:var(--amber); }
   .pulse-item .pl { color:var(--dim); }
 
-  .cols3 { display:grid; grid-template-columns:repeat(3,1fr); gap:16px; align-items:start; }
+  .usage-head { display:flex; align-items:center; gap:12px; flex-wrap:wrap; margin-bottom:14px; }
+  .cols2 { display:grid; grid-template-columns:1fr 1fr; gap:16px; align-items:start; }
+  .usage-card-sub { font-size:11.5px; color:var(--faint); margin-top:4px; }
+ display:grid; grid-template-columns:repeat(3,1fr); gap:16px; align-items:start; }
 
   /* ---- buttons & forms ---- */
   button.btn { background:var(--accent); color:#fff; border:none; padding:7px 14px; border-radius:8px;
@@ -342,6 +345,7 @@
     <button id="tab-today" onclick="switchView('today')">Today</button>
     <button id="tab-guests" onclick="switchView('guests')">Guests</button>
     <button id="tab-activities" onclick="switchView('activities')">Activities</button>
+    <button id="tab-usage" onclick="switchView('usage')">Usage</button>
   </nav>
   <div class="right">
     <div class="conn" id="conn-status">connected</div>
@@ -427,6 +431,41 @@
       </div>
     </div>
   </section>
+  <!-- ================= USAGE ================= -->
+  <section class="view" id="view-usage">
+    <div class="usage-head">
+      <div>
+        <div style="font-size:16px;font-weight:700">WhatsApp Operations</div>
+        <div style="font-size:12.5px;color:var(--dim)">Twilio balance + message health · times shown in IST</div>
+      </div>
+      <div style="margin-left:auto;display:flex;align-items:center;gap:10px">
+        <span style="font-size:11.5px;color:var(--faint)" id="usage-synced"></span>
+        <button class="btn secondary small" id="usage-refresh-btn" onclick="loadUsage(true)">↻ Refresh</button>
+      </div>
+    </div>
+    <div id="usage-warning"></div>
+    <div class="stats" id="usage-cards"></div>
+    <div class="cols2">
+      <div class="card">
+        <h2>WhatsApp usage — last 7 days <span class="count">IST</span></h2>
+        <div style="padding:16px" id="usage-chart"></div>
+      </div>
+      <div>
+        <div class="card" style="margin-bottom:16px">
+          <h2>Estimated capacity</h2>
+          <div style="padding:16px" id="usage-capacity"></div>
+        </div>
+        <div class="card">
+          <h2>WhatsApp connection</h2>
+          <div style="padding:16px" id="usage-connection"></div>
+        </div>
+      </div>
+    </div>
+    <div class="card" style="margin-top:16px">
+      <h2>Recent WhatsApp messages <span class="count" id="usage-recent-count"></span></h2>
+      <div class="list" id="usage-recent"></div>
+    </div>
+  </section>
 </main>
 
 <div class="toasts" id="toasts"></div>
@@ -440,6 +479,7 @@ let detailTab = 'chat';
 let currentView = 'today';
 let guestsCache = [];
 let activitiesCache = [];
+let usageCache = null;
 let guestFilter = 'all';
 let activityFilter = 'all';
 
@@ -556,12 +596,13 @@ async function boot() {
 function refreshAll() {
   if (currentView === 'today') loadOverview();
   else if (currentView === 'guests') { loadGuests(); if (selectedId) refreshDetailQuiet(); }
-  else loadActivities();
+  else if (currentView === 'activities') loadActivities();
+  else if (currentView === 'usage') loadUsage();
 }
 
 function switchView(v) {
   currentView = v;
-  for (const x of ['today','guests','activities']) {
+  for (const x of ['today','guests','activities','usage']) {
     document.getElementById('view-' + x).classList.toggle('active', x === v);
     document.getElementById('tab-' + x).classList.toggle('active', x === v);
   }
@@ -1161,6 +1202,109 @@ function renderActivityAudience() {
   const names = willGet.map(g => esc(g.name)).join(", ") || "—";
   const skip = skipped ? '<div style="font-size:11.5px;color:var(--amber);margin-top:4px">' + skipped + ' skipped (AI paused / activities off / daily cap)</div>' : '';
   el.innerHTML = '<div style="font-size:13px"><b>' + willGet.length + ' guest' + (willGet.length===1?'':'s') + '</b> will receive this: ' + esc(names) + skip + '</div>';
+}
+
+/* ---------- USAGE ---------- */
+function renderUsage(u) {
+  const m = u.messages;
+  document.getElementById('usage-synced').textContent = 'Last synced: ' + fmtTs(u.syncedAt) + (u.cached ? ' (cached)' : '');
+
+  // warning banner
+  const warn = document.getElementById('usage-warning');
+  if (u.balance.error) {
+    warn.innerHTML = `<div class="window-note" style="background:var(--red-soft);color:var(--red)">Unable to load Twilio balance — ${esc(u.balance.error)}. <a href="#" onclick="loadUsage(true);return false" style="color:var(--red)">Retry</a></div>`;
+  } else if (u.balance.health === 'critical') {
+    warn.innerHTML = `<div class="window-note" style="background:var(--red-soft);color:var(--red)">🚨 Twilio balance is critically low ($${u.balance.amount.toFixed(2)}). <a href="https://console.twilio.com" target="_blank" rel="noopener">Open Twilio Console</a></div>`;
+  } else if (u.balance.health === 'low') {
+    warn.innerHTML = `<div class="window-note">⚠️ Twilio balance is getting low ($${u.balance.amount.toFixed(2)}). <a href="https://console.twilio.com" target="_blank" rel="noopener">Open Twilio Console</a></div>`;
+  } else {
+    warn.innerHTML = `<div style="font-size:12px;color:var(--green);margin-bottom:12px">✓ Communications ready</div>`;
+  }
+
+  // metric cards
+  const b = u.balance;
+  const balCard = b.error
+    ? `<div class="stat"><div class="n" style="color:var(--red);font-size:18px">⚠️</div><div class="l">Unable to load balance</div><div class="sub"><a href="#" onclick="loadUsage(true);return false" style="color:var(--accent)">Retry</a></div></div>`
+    : `<div class="stat"><span class="ic ${b.health === 'healthy' ? 'ic-green' : b.health === 'low' ? 'ic-amber' : 'ic-red'}">💰</span><div class="n">$${Number(b.amount).toFixed(2)}</div><div class="l">Twilio balance (${b.currency})</div><div class="sub" style="color:${b.health === 'healthy' ? 'var(--green)' : b.health === 'low' ? 'var(--amber)' : 'var(--red)'};font-weight:700">● ${b.health}</div></div>`;
+  const rate = m.deliveryRate === null ? '—' : m.deliveryRate + '%';
+  document.getElementById('usage-cards').innerHTML = `
+    <div class="stat"><span class="ic ic-green">💰</span><div class="n">$${Number(u.balance.amount ?? 0).toFixed(2)}</div><div class="l">Twilio balance</div><div class="sub" style="color:${u.balance.health === 'healthy' ? 'var(--green)' : 'var(--amber)'};font-weight:700">● ${u.balance.health ?? 'unknown'}</div></div>
+    <div class="stat"><span class="ic ic-accent">📨</span><div class="n c-accent">${m.sentToday}</div><div class="l">Sent today</div><div class="sub">WhatsApp messages</div></div>
+    <div class="stat"><span class="ic ic-accent">📨</span><div class="n">${m.sentThisMonth}</div><div class="l">Sent this month</div><div class="sub">Outbound messages</div></div>
+    <div class="stat"><span class="ic ic-purple">💬</span><div class="n">${m.receivedThisMonth}</div><div class="l">Received</div><div class="sub">Inbound replies</div></div>
+    <div class="stat"><span class="ic ic-red">⚠️</span><div class="n ${m.failedThisMonth ? 'c-red' : ''}">${m.failedThisMonth}</div><div class="l">Failed</div><div class="sub">This month</div></div>
+    <div class="stat"><span class="ic ic-green">📊</span><div class="n ${m.deliveryRate !== null && m.deliveryRate >= 90 ? 'c-green' : ''}">${m.deliveryRate === null ? '—' : m.deliveryRate + '%'}</div><div class="l">Delivery rate</div><div class="sub">Delivered ÷ sent</div></div>`;
+
+  // capacity
+  const capEl = document.getElementById('usage-capacity');
+  if (u.capacity.unavailable) {
+    capEl.innerHTML = `<div style="font-size:13px;color:var(--dim)">Capacity estimate unavailable</div><div class="usage-card-sub">Set USAGE_EST_COST_PER_MSG_USD to enable the estimate.</div>`;
+  } else {
+    capEl.innerHTML = `<div class="n" style="font-size:20px">~${Number(u.capacity.messages).toLocaleString()} messages</div>
+      <div class="usage-card-sub">Based on current balance ÷ estimated $${u.capacity.perMessageCost}/message</div>
+      <div class="usage-card-sub">Estimate only — WhatsApp pricing varies by category and country.</div>`;
+  }
+
+  // connection
+  document.getElementById('usage-connection').innerHTML = `
+    <div style="display:flex;align-items:center;gap:8px;font-size:13.5px;margin-bottom:8px">
+      <span class="conn ${u.sender.connected ? '' : 'err'}" style="color:var(--text)">Twilio Connection</span>
+    </div>
+    <div style="font-size:12.5px;color:var(--dim);line-height:1.7">
+      WhatsApp Sender<br><b style="color:var(--text)">${esc(u.sender.number)}</b><br>
+      Status: <span style="color:${u.sender.connected ? 'var(--green)' : 'var(--red)'};font-weight:700">● ${u.sender.connected ? 'Online' : 'Check Twilio'}</span><br>
+      Last successful sync: ${fmtTs(u.syncedAt)}
+    </div>`;
+
+  renderUsageChart(m.daily);
+  renderUsageRecent(m.recent ?? []);
+}
+
+function renderUsageChart(daily) {
+  const days = Object.entries(daily).sort(([a], [b]) => a.localeCompare(b)).slice(-7);
+  const max = Math.max(1, ...days.flatMap(([, v]) => [v.sent, v.received]));
+  const bars = days.map(([day, v]) => {
+    const sh = Math.max(4, Math.round((v.sent / max) * 100));
+    const rh = Math.max(3, Math.round((v.received / max) * 100));
+    const label = new Date(day + 'T12:00:00Z').toLocaleDateString('en-IN', { weekday: 'short' });
+    return `<div style="flex:1;display:flex;flex-direction:column;justify-content:flex-end;height:100%">
+      <div style="display:flex;align-items:flex-end;justify-content:center;gap:3px;height:105px">
+        <div title="Sent: ${v.sent}" style="width:14px;height:${sh}%;background:var(--accent);border-radius:4px 4px 0 0;min-height:3px"></div>
+        <div title="Received: ${v.received}" style="width:14px;height:${rh}%;background:var(--purple);border-radius:4px 4px 0 0;min-height:3px"></div>
+      </div>
+      <div style="font-size:10.5px;color:var(--dim);margin-top:5px;font-weight:600">${label}</div>
+    </div>`;
+  }).join('');
+  document.getElementById('usage-chart').innerHTML = `
+    <div style="display:flex;align-items:flex-end;gap:8px;height:130px">${bars}</div>
+    <div style="font-size:11px;color:var(--faint);margin-top:8px;display:flex;gap:14px;align-items:center">
+      <span><span style="display:inline-block;width:9px;height:9px;background:var(--accent);border-radius:3px"></span> Sent</span>
+      <span><span style="display:inline-block;width:9px;height:9px;background:var(--purple);border-radius:3px"></span> Received</span>
+      <span style="margin-left:auto">peak ${max}/day</span></div>`;
+}
+
+function renderUsageRecent(recent) {
+  const el = document.getElementById('usage-recent');
+  document.getElementById('usage-recent-count').textContent = '(' + recent.length + ')';
+  if (!recent.length) { el.innerHTML = '<div class="empty">No messages yet.</div>'; return; }
+  el.innerHTML = recent.map(msg => `
+    <div class="prow">
+      <div style="width:52px;font-size:12px;color:var(--dim)">${esc(msg.time_ist ?? '')}</div>
+      <div style="width:90px;font-size:12.5px">${msg.direction === 'in' ? '↩ Inbound' : '↪ Outbound'}</div>
+      <div class="pmain"><div class="pname" style="font-size:13px">${esc(msg.guest_name ?? '—')}</div></div>
+      <div style="width:80px;font-size:12.5px;color:var(--dim)">${msg.message_type === 'template' ? 'Template' : 'Text'}</div>
+      <div><span class="st-${msg.status}">${esc(msg.status)}</span></div>
+    </div>`).join('');
+}
+
+async function loadUsage(force) {
+  const btn = document.getElementById('usage-refresh-btn');
+  if (force && btn) { btn.disabled = true; btn.textContent = 'Refreshing…'; }
+  try {
+    usageCache = await api('/usage' + (force ? '?refresh=1' : ''));
+    renderUsage(usageCache);
+  } catch (e) { toast(e.message, true); }
+  if (btn) { btn.disabled = false; btn.textContent = '↻ Refresh'; }
 }
 
 /* ---------- ACTIVITIES ---------- */

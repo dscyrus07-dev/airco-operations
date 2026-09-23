@@ -16,6 +16,7 @@ import {
   broadcastActivityById,
   getActivity,
 } from '../agent/activities.js';
+import { getUsage } from './usage.js';
 import { queueMessage, dispatchPending } from '../messaging/outbound.js';
 
 function safeEqual(a, b) {
@@ -355,6 +356,17 @@ export function adminRouter() {
       res.json(activity);
     } catch (err) {
       next(err);
+    }
+  });
+
+  // Twilio WhatsApp usage/health — balance via Twilio REST (server-side only),
+  // message counters from our own database. Cached 60s; ?refresh=1 forces fresh.
+  router.get('/api/usage', async (req, res, next) => {
+    try {
+      const force = req.query.refresh === '1';
+      res.json(await getUsage({ force }));
+    } catch (err) {
+      res.status(502).json({ error: 'Twilio usage temporarily unavailable', detail: err.message });
     }
   });
 

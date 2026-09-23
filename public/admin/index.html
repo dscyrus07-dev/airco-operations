@@ -119,12 +119,12 @@
     padding:8px 11px; font-size:12px; display:flex; align-items:center; gap:8px; }
   .pulse-item .pi { font-weight:800; font-size:13px; }
   .pulse-item.ok .pi { color:var(--green); } .pulse-item.wait .pi { color:var(--amber); }
-  .pulse-item .pl { color:var(--dim); }
+  .pulse-item .pl { color:#111827; font-weight:600; }
 
   .usage-head { display:flex; align-items:center; gap:12px; flex-wrap:wrap; margin-bottom:14px; }
   .cols2 { display:grid; grid-template-columns:1fr 1fr; gap:16px; align-items:start; }
   .usage-card-sub { font-size:11.5px; color:var(--faint); margin-top:4px; }
- display:grid; grid-template-columns:repeat(3,1fr); gap:16px; align-items:start; }
+  .cols3 { display:grid; grid-template-columns:repeat(3,1fr); gap:16px; align-items:start; }
 
   /* ---- buttons & forms ---- */
   button.btn { background:var(--accent); color:#fff; border:none; padding:7px 14px; border-radius:8px;
@@ -299,9 +299,6 @@
   .jstep { font-size:13px; padding:4px 0; color:var(--dim); display:flex; align-items:center; gap:8px; }
   .jstep.done { color:var(--green); font-weight:600; } .jstep.now { color:var(--accent); font-weight:700; }
   .jstep-arrow { color:#cbd5e1; font-size:11px; padding-left:6px; line-height:1; }
-  .pulse-item .pi { font-weight:800; font-size:13px; }
-  .pulse-item.ok .pi { color:#34d399; } .pulse-item.wait .pi { color:#fbbf24; }
-  .pulse-item .pl { color:#c7d2fe; }
   .stats { display:grid; grid-template-columns:repeat(auto-fit,minmax(168px,1fr)); gap:12px; margin-bottom:18px; }
   .stat { background:var(--card); border:1px solid var(--line); border-radius:var(--radius);
     padding:14px 16px; box-shadow:var(--shadow); transition:transform .15s, box-shadow .15s; position:relative; }

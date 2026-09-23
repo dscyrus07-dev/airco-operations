@@ -8,7 +8,14 @@ import {
   normalizeDate,
   normalizePhone,
 } from '../agent/triggers.js';
-import { createAndBroadcastActivity, listActivities } from '../agent/activities.js';
+import {
+  createAndBroadcastActivity,
+  listActivities,
+  updateActivity,
+  deleteActivity,
+  broadcastActivityById,
+  getActivity,
+} from '../agent/activities.js';
 import { queueMessage, dispatchPending } from '../messaging/outbound.js';
 
 function safeEqual(a, b) {
@@ -40,12 +47,13 @@ export function adminRouter() {
         `SELECT g.id, g.phone, g.name, g.room,
                 to_char(g.check_in, 'YYYY-MM-DD') AS check_in,
                 to_char(g.check_out, 'YYYY-MM-DD') AS check_out,
-                g.journey_state, g.ai_paused, g.created_at,
+                g.journey_state, g.ai_paused, g.whatsapp_opt_in, g.created_at,
                 (SELECT count(*) FROM messages m
                   WHERE m.guest_id = g.id AND m.direction = 'out' AND m.message_type = 'template'
                     AND (m.created_at AT TIME ZONE 'Asia/Kolkata')::date
                       = (now() AT TIME ZONE 'Asia/Kolkata')::date)::int AS proactive_today
          FROM guests g
+         WHERE g.archived = FALSE
          ORDER BY g.id DESC
          LIMIT 500`
       );
@@ -154,6 +162,23 @@ export function adminRouter() {
         [...Object.values(updates), id]
       );
       res.json(rows[0]);
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  // Soft-delete (archive): removes the guest from the operations dashboard
+  // while preserving every message, journey event and audit row.
+  router.delete('/api/guests/:id', async (req, res, next) => {
+    try {
+      const id = Number(req.params.id);
+      if (!Number.isInteger(id)) return res.status(400).json({ error: 'bad id' });
+      const rows = await query(
+        `UPDATE guests SET archived = TRUE WHERE id = $1 AND archived = FALSE RETURNING id, name`,
+        [id]
+      );
+      if (rows.length === 0) return res.status(404).json({ error: 'guest not found' });
+      res.json({ ok: true, id: rows[0].id, name: rows[0].name });
     } catch (err) {
       next(err);
     }
@@ -285,6 +310,51 @@ export function adminRouter() {
       res.status(201).json(result);
     } catch (err) {
       res.status(400).json({ error: err.message });
+    }
+  });
+
+  router.patch('/api/activities/:id', async (req, res) => {
+    try {
+      const id = Number(req.params.id);
+      if (!Number.isInteger(id)) return res.status(400).json({ error: 'bad id' });
+      const updated = await updateActivity(id, req.body ?? {});
+      res.json(updated);
+    } catch (err) {
+      res.status(400).json({ error: err.message });
+    }
+  });
+
+  router.delete('/api/activities/:id', async (req, res) => {
+    try {
+      const id = Number(req.params.id);
+      if (!Number.isInteger(id)) return res.status(400).json({ error: 'bad id' });
+      res.json(await deleteActivity(id));
+    } catch (err) {
+      res.status(400).json({ error: err.message });
+    }
+  });
+
+  // Send (or re-send to new in-house guests) a stored draft/scheduled activity.
+  router.post('/api/activities/:id/send', async (req, res) => {
+    try {
+      const id = Number(req.params.id);
+      if (!Number.isInteger(id)) return res.status(400).json({ error: 'bad id' });
+      const result = await broadcastActivityById(id);
+      res.json({ activityId: id, ...result });
+    } catch (err) {
+      res.status(400).json({ error: err.message });
+    }
+  });
+
+  router.get('/api/activities/:id', async (req, res, next) => {
+    try {
+      const id = Number(req.params.id);
+      if (!Number.isInteger(id)) return res.status(400).json({ error: 'bad id' });
+      const activity = await getActivity(id);
+      if (!activity) return res.status(404).json({ error: 'activity not found' });
+      res.json(activity);
+    } catch (err) {
+      next(err);
     }
   });
 

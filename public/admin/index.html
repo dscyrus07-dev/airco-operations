@@ -6,154 +6,324 @@
 <title>Airco Agent — Zostel Mumbai</title>
 <style>
   :root {
-    --bg:#f6f7f9; --card:#fff; --line:#e5e7eb; --text:#111827; --dim:#6b7280;
-    --accent:#4f46e5; --accent-soft:#eef2ff; --green:#059669; --green-soft:#ecfdf5;
-    --red:#dc2626; --red-soft:#fef2f2; --amber:#d97706; --amber-soft:#fffbeb;
-    --shadow:0 1px 3px rgba(16,24,40,.08); --radius:10px;
+    --bg:#f4f5f7; --card:#fff; --line:#e6e8ec; --text:#111827; --dim:#6b7280; --faint:#9ca3af;
+    --accent:#4f46e5; --accent-hover:#4338ca; --accent-soft:#eef2ff; --accent-line:#e0e7ff;
+    --green:#059669; --green-soft:#ecfdf5; --green-line:#d1fae5;
+    --red:#dc2626; --red-soft:#fef2f2; --red-line:#fee2e2;
+    --amber:#d97706; --amber-soft:#fffbeb; --amber-line:#fef3c7;
+    --purple:#7e22ce; --purple-soft:#f3e8ff;
+    --teal:#0f766e; --teal-soft:#ccfbf1;
+    --shadow:0 1px 3px rgba(16,24,40,.06),0 1px 2px rgba(16,24,40,.04);
+    --shadow-lg:0 8px 30px rgba(16,24,40,.16);
+    --radius:12px;
   }
   * { box-sizing:border-box; margin:0; padding:0; font-family:-apple-system,'Segoe UI',Roboto,'Helvetica Neue',sans-serif; }
-  body { background:var(--bg); color:var(--text); font-size:14px; }
+  body { background:var(--bg); color:var(--text); font-size:14px; -webkit-font-smoothing:antialiased; }
 
-  /* ---- top nav ---- */
+  /* ---- top bar ---- */
   header.topbar { position:sticky; top:0; z-index:50; display:flex; align-items:center; gap:20px;
-    padding:0 20px; height:56px; background:#111827; color:#fff; }
+    padding:0 20px; height:58px; background:#0f172a; color:#fff; }
   .brand { display:flex; align-items:center; gap:10px; font-weight:700; font-size:15px; }
   .brand .dot { width:28px; height:28px; border-radius:8px; background:linear-gradient(135deg,#6366f1,#8b5cf6);
-    display:flex; align-items:center; justify-content:center; font-size:13px; font-weight:800; }
+    display:flex; align-items:center; justify-content:center; font-size:13px; font-weight:800;
+    box-shadow:0 2px 8px rgba(99,102,241,.45); }
   .brand .sub { font-weight:400; font-size:11px; opacity:.6; }
   nav.tabs { display:flex; gap:4px; margin-left:16px; }
-  nav.tabs button { background:transparent; color:#9ca3af; border:none; padding:6px 14px; border-radius:8px;
-    font-size:13.5px; font-weight:500; cursor:pointer; }
+  nav.tabs button { background:transparent; color:#94a3b8; border:none; padding:7px 14px; border-radius:8px;
+    font-size:13.5px; font-weight:500; cursor:pointer; transition:all .15s; }
   nav.tabs button:hover { color:#fff; background:rgba(255,255,255,.08); }
   nav.tabs button.active { color:#fff; background:rgba(255,255,255,.14); }
   .topbar .right { margin-left:auto; display:flex; align-items:center; gap:12px; }
-  .conn { font-size:11.5px; color:#9ca3af; display:flex; align-items:center; gap:6px; }
-  .conn::before { content:''; width:7px; height:7px; border-radius:50%; background:#10b981; }
+  .conn { font-size:11.5px; color:#94a3b8; display:flex; align-items:center; gap:6px; }
+  .conn::before { content:''; width:7px; height:7px; border-radius:50%; background:#10b981; box-shadow:0 0 6px rgba(16,185,129,.7); }
   .conn.err::before { background:#ef4444; }
-  .lockbtn { background:rgba(255,255,255,.1); color:#d1d5db; border:none; padding:5px 12px;
+  .lockbtn { background:rgba(255,255,255,.1); color:#cbd5e1; border:none; padding:5px 12px;
     border-radius:7px; font-size:12.5px; cursor:pointer; }
   .lockbtn:hover { background:rgba(255,255,255,.2); color:#fff; }
 
   /* ---- layout ---- */
-  main { padding:20px; max-width:1440px; margin:0 auto; }
-  .view { display:none; }
+  main { padding:22px; max-width:1440px; margin:0 auto; }
+  .view { display:none; animation:viewin .22s cubic-bezier(.2,.8,.3,1); }
   .view.active { display:block; }
-  .split { display:grid; grid-template-columns:400px 1fr; gap:16px; align-items:start; }
+  @keyframes viewin { from { opacity:0; transform:translateY(6px); } to { opacity:1; transform:none; } }
+  .split { display:grid; grid-template-columns:410px 1fr; gap:18px; align-items:start; }
   .card { background:var(--card); border:1px solid var(--line); border-radius:var(--radius);
     box-shadow:var(--shadow); overflow:hidden; }
-  .card h2 { font-size:13px; font-weight:600; color:var(--dim); text-transform:uppercase; letter-spacing:.4px;
+  .card h2 { font-size:12px; font-weight:700; color:var(--dim); text-transform:uppercase; letter-spacing:.4px;
     padding:12px 16px; border-bottom:1px solid var(--line); display:flex; align-items:center; gap:8px; }
-  .card h2 .count { font-weight:600; color:#9ca3af; }
-  .card h2 .spacer { margin-left:auto; }
+  .card h2 .count { font-weight:600; color:var(--faint); text-transform:none; letter-spacing:0; }
+  .card h2 .spacer { margin-left:auto; display:flex; gap:6px; align-items:center; }
   .list { overflow-y:auto; }
-  .maxh-360 { max-height:360px; }
   .maxh-560 { max-height:560px; }
+
+  /* ---- rows / people ---- */
+  .prow { display:flex; align-items:center; gap:12px; padding:11px 16px; border-bottom:1px solid #f3f4f6;
+    transition:background .13s; }
+  .prow:last-child { border-bottom:none; }
+  .prow.clickable { cursor:pointer; }
+  .prow.clickable:hover { background:#f9fafb; }
+  .prow.selected { background:var(--accent-soft); box-shadow:inset 3px 0 0 var(--accent); }
+  .avatar { width:36px; height:36px; border-radius:50%; flex:none; display:flex; align-items:center;
+    justify-content:center; font-size:13px; font-weight:700; color:#fff; }
+  .pmain { flex:1; min-width:0; }
+  .pname { font-weight:600; display:flex; align-items:center; gap:6px; flex-wrap:wrap; }
+  .pmeta { font-size:12px; color:var(--dim); margin-top:2px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .flag-paused { font-size:10px; font-weight:800; color:var(--red); background:var(--red-soft); padding:1px 6px; border-radius:8px; }
+  .flag-optout { font-size:10px; font-weight:800; color:var(--amber); background:var(--amber-soft); padding:1px 6px; border-radius:8px; }
+
+  /* ---- badges & chips ---- */
+  .badge { font-size:11px; padding:3px 10px; border-radius:999px; font-weight:600; white-space:nowrap;
+    display:inline-flex; align-items:center; gap:5px; }
+  .badge .bdot { width:6px; height:6px; border-radius:50%; background:currentColor; opacity:.75; }
+  .b-booked{background:#e0e7ff;color:#4338ca}.b-pre_arrival{background:#ccfbf1;color:#0f766e}
+  .b-checked_in,.b-in_stay{background:#d1fae5;color:#047857}.b-checkout_pending{background:#fef3c7;color:#b45309}
+  .b-checked_out{background:#f3f4f6;color:#4b5563}.b-review_requested{background:#f3e8ff;color:#7e22ce}
+  .b-closed{background:#1f2937;color:#fff}
+  .b-draft{background:#f3f4f6;color:#4b5563}.b-scheduled{background:#e0f2fe;color:#0369a1}
+  .b-active{background:var(--green-soft);color:var(--green)}.b-cancelled{background:var(--red-soft);color:var(--red);text-decoration:line-through}
+  .b-sent{background:var(--green-soft);color:var(--green)}
+  .flag-paused { font-size:10px; font-weight:800; color:var(--red); background:var(--red-soft); padding:1px 6px; border-radius:8px; }
+  .flag-optout { font-size:10px; font-weight:800; color:var(--amber); background:var(--amber-soft); padding:1px 6px; border-radius:8px; }
+
+  /* ---- filter chips ---- */
+  .chips { display:flex; gap:6px; flex-wrap:wrap; padding:10px 14px; border-bottom:1px solid var(--line); }
+  .chip { background:#f3f4f6; color:var(--dim); border:none; padding:4px 12px; border-radius:999px;
+    font-size:12px; font-weight:600; cursor:pointer; transition:all .15s; }
+  .chip:hover { background:#e9ebef; }
+  .chip.active { background:var(--accent); color:#fff; }
+
+  /* ---- stats / pulse ---- */
+  .stats { display:grid; grid-template-columns:repeat(auto-fit,minmax(168px,1fr)); gap:12px; margin-bottom:16px; }
+  .stat { background:var(--card); border:1px solid var(--line); border-radius:var(--radius);
+    padding:14px 16px; box-shadow:var(--shadow); transition:transform .15s, box-shadow .15s; position:relative; }
+  .stat:hover { transform:translateY(-2px); box-shadow:var(--shadow-lg); }
+  .stat .ic { width:30px; height:30px; border-radius:8px; display:flex; align-items:center; justify-content:center;
+    font-size:14px; position:absolute; top:13px; right:14px; }
+  .stat .n { font-size:26px; font-weight:800; letter-spacing:-.5px; }
+  .stat .l { font-size:12px; color:var(--dim); margin-top:2px; font-weight:500; }
+  .stat .sub { font-size:11px; color:var(--faint); margin-top:3px; }
+  .stat .n.c-accent{color:var(--accent)} .stat .n.c-green{color:var(--green)} .stat .n.c-amber{color:var(--amber)}
+  .stat .n.c-red{color:var(--red)} .stat .n.c-purple{color:var(--purple)}
+
+  .pulse { background:linear-gradient(135deg,#111827 0%,#1e1b4b 100%); color:#fff; border-radius:var(--radius);
+    padding:18px 20px; margin-bottom:16px; box-shadow:var(--shadow); position:relative; overflow:hidden; }
+  .pulse::after { content:''; position:absolute; right:-40px; top:-60px; width:200px; height:200px;
+    background:radial-gradient(circle,rgba(99,102,241,.35),transparent 70%); border-radius:50%; pointer-events:none; }
+  .pulse-head { display:flex; align-items:baseline; gap:12px; flex-wrap:wrap; }
+  .pulse-title { font-size:13px; font-weight:800; letter-spacing:.6px; text-transform:uppercase; color:#c7d2fe; }
+  .pulse-msg { font-size:12.5px; color:#c7d2fe; }
+  .pulse .pct { margin-left:auto; font-size:24px; font-weight:800; letter-spacing:-.5px; color:#fff; }
+  .pulse-bar { height:8px; background:rgba(255,255,255,.14); border-radius:999px; overflow:hidden; margin-top:10px; }
+  .pulse-fill { height:100%; border-radius:999px; background:linear-gradient(90deg,#6366f1,#a78bfa);
+    transition:width .9s cubic-bezier(.2,.8,.3,1); }
+  .pulse-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(140px,1fr)); gap:8px; margin-top:12px; }
+  .pulse-item { background:rgba(255,255,255,.08); border:1px solid rgba(255,255,255,.09); border-radius:9px;
+    padding:8px 11px; font-size:12px; display:flex; align-items:center; gap:8px; }
+  .pulse-item .pi { font-weight:800; font-size:13px; }
+  .pulse-item.ok .pi { color:#34d399; } .pulse-item.wait .pi { color:#fbbf24; }
+  .pulse-item .pl { color:#c7d2fe; }
+
+  .cols3 { display:grid; grid-template-columns:repeat(3,1fr); gap:16px; align-items:start; }
+
+  /* ---- buttons & forms ---- */
+  button.btn { background:var(--accent); color:#fff; border:none; padding:7px 14px; border-radius:8px;
+    font-size:13px; font-weight:600; cursor:pointer; display:inline-flex; align-items:center; gap:6px;
+    transition:all .15s; }
+  button.btn:hover { background:var(--accent-hover); }
+  button.btn:disabled { opacity:.5; cursor:default; }
+  button.btn.secondary { background:#fff; color:var(--text); border:1px solid var(--line); }
+  button.btn.secondary:hover { background:#f6f7f9; }
+  button.btn.green { background:var(--green); } button.btn.green:hover { background:#047857; }
+  button.btn.danger { background:var(--red); } button.btn.danger:hover { background:#b91c1c; }
+  button.btn.ghost { background:transparent; color:var(--dim); border:1px solid var(--line); }
+  button.btn.small { padding:4px 10px; font-size:12px; border-radius:7px; }
+  .spin { width:13px; height:13px; border:2px solid rgba(255,255,255,.35); border-top-color:#fff;
+    border-radius:50%; animation:spin .7s linear infinite; display:inline-block; }
+  @keyframes spin { to { transform:rotate(360deg); } }
+  label.fl { font-size:12px; color:var(--dim); display:block; margin-bottom:4px; font-weight:500; }
+  input.in, textarea.in, select.in { width:100%; padding:8px 11px; border:1px solid var(--line); border-radius:8px;
+    font-size:13.5px; background:#fff; color:var(--text); }
+  input.in:focus, textarea.in:focus { outline:none; border-color:var(--accent); box-shadow:0 0 0 3px var(--accent-soft); }
+  .form-grid { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+  .full { grid-column:1/-1; }
+  .searchbox { display:flex; align-items:center; gap:8px; padding:8px 12px; border-bottom:1px solid var(--line); }
+
+  /* ---- chips / filters ---- */
+  .chips { display:flex; gap:6px; flex-wrap:wrap; padding:10px 14px; border-bottom:1px solid var(--line); }
+  .chip { background:#f3f4f6; color:var(--dim); border:none; padding:4px 12px; border-radius:999px;
+    font-size:12px; font-weight:600; cursor:pointer; transition:all .15s; }
+  .chip:hover { background:#e8eaee; }
+  .chip.active { background:var(--accent); color:#fff; }
+
+  .jbar { height:4px; background:#eef0f3; border-radius:999px; overflow:hidden; margin-top:6px; }
+  .jbar > div { height:100%; border-radius:999px; background:linear-gradient(90deg,#6366f1,#8b5cf6); transition:width .6s cubic-bezier(.2,.8,.3,1); }
+  .progress { height:8px; background:#eef0f3; border-radius:999px; overflow:hidden; }
+  .progress .jbar-fill { height:100%; border-radius:999px; background:linear-gradient(90deg,#6366f1,#a78bfa); transition:width .7s cubic-bezier(.2,.8,.3,1); }
+  .jpct { font-variant-numeric:tabular-nums; }
+  .arow { display:flex; align-items:center; gap:12px; padding:12px 16px; border-bottom:1px solid #f3f4f6; }
+  .arow:last-child { border-bottom:none; }
+  .arow:hover { background:#f9fafb; }
+  .aicon { width:38px; height:38px; border-radius:10px; background:var(--accent-soft); display:flex; align-items:center; justify-content:center; font-size:17px; flex:none; }
+
+  /* ---- badges ---- */
+  .badge { font-size:11px; padding:3px 9px; border-radius:999px; font-weight:600; white-space:nowrap;
+    display:inline-flex; align-items:center; gap:5px; }
+  .badge .bdot { width:6px; height:6px; border-radius:50%; background:currentColor; opacity:.75; }
+  .b-booked{background:#e0e7ff;color:#4338ca}.b-pre_arrival{background:#ccfbf1;color:#0f766e}
+  .b-checked_in,.b-in_stay{background:#d1fae5;color:#047857}.b-checkout_pending{background:#fef3c7;color:#b45309}
+  .b-checked_out{background:#f3f4f6;color:#4b5563}.b-review_requested{background:#f3e8ff;color:#7e22ce}
+  .b-closed{background:#1f2937;color:#fff}
+  .b-draft{background:#f3f4f6;color:#4b5563}.b-scheduled{background:#e0f2fe;color:#0369a1}
+  .b-active{background:#d1fae5;color:#047857}.b-cancelled{background:#fee2e2;color:#b91c1c;text-decoration:line-through}
+  .flag-paused { font-size:10px; font-weight:800; color:var(--red); background:var(--red-soft); padding:1px 6px; border-radius:8px; }
+  .flag-optout { font-size:10px; font-weight:800; color:var(--amber); background:var(--amber-soft); padding:1px 6px; border-radius:8px; }
 
   /* ---- rows / people ---- */
   .prow { display:flex; align-items:center; gap:12px; padding:11px 16px; border-bottom:1px solid #f3f4f6; }
   .prow:last-child { border-bottom:none; }
   .prow.clickable { cursor:pointer; }
   .prow.clickable:hover { background:#f9fafb; }
-  .prow.selected { background:var(--accent-soft); }
+  .prow.selected { background:var(--accent-soft); box-shadow:inset 3px 0 0 var(--accent); }
   .avatar { width:36px; height:36px; border-radius:50%; flex:none; display:flex; align-items:center;
     justify-content:center; font-size:13px; font-weight:700; color:#fff; }
   .pmain { flex:1; min-width:0; }
   .pname { font-weight:600; display:flex; align-items:center; gap:6px; }
   .pmeta { font-size:12px; color:var(--dim); margin-top:2px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-  .flag-paused { font-size:10px; font-weight:800; color:var(--red); background:var(--red-soft);
-    padding:1px 6px; border-radius:8px; }
-  .flag-optout { font-size:10px; font-weight:800; color:var(--amber); background:var(--amber-soft);
-    padding:1px 6px; border-radius:8px; }
-
-  /* ---- badges ---- */
-  .badge { font-size:11px; padding:3px 9px; border-radius:999px; font-weight:600; white-space:nowrap; }
-  .b-booked{background:#e0e7ff;color:#4338ca}.b-pre_arrival{background:#ccfbf1;color:#0f766e}
-  .b-checked_in,.b-in_stay{background:#d1fae5;color:#047857}.b-checkout_pending{background:#fef3c7;color:#b45309}
-  .b-checked_out{background:#f3f4f6;color:#4b5563}.b-review_requested{background:#f3e8ff;color:#7e22ce}
-  .b-closed{background:#1f2937;color:#fff}
-
-  /* ---- stats ---- */
-  .stats { display:grid; grid-template-columns:repeat(auto-fit,minmax(170px,1fr)); gap:12px; margin-bottom:16px; }
-  .stat { background:var(--card); border:1px solid var(--line); border-radius:var(--radius);
-    padding:14px 16px; box-shadow:var(--shadow); }
-  .stat .n { font-size:26px; font-weight:800; letter-spacing:-.5px; }
-  .stat .l { font-size:12px; color:var(--dim); margin-top:2px; font-weight:500; }
-  .stat.accent .n { color:var(--accent); } .stat.green .n { color:var(--green); }
-  .stat.amber .n { color:var(--amber); } .stat.red .n { color:var(--red); }
-  .cols3 { display:grid; grid-template-columns:repeat(3,1fr); gap:16px; align-items:start; }
+  .jbar { height:4px; background:#eef0f3; border-radius:999px; overflow:hidden; margin-top:6px; }
+  .jbar > div { height:100%; border-radius:999px; background:linear-gradient(90deg,#6366f1,#8b5cf6);
+    transition:width .6s cubic-bezier(.2,.8,.3,1); }
 
   /* ---- buttons & forms ---- */
   button.btn { background:var(--accent); color:#fff; border:none; padding:7px 14px; border-radius:8px;
-    font-size:13px; font-weight:600; cursor:pointer; display:inline-flex; align-items:center; gap:6px; }
-  button.btn:hover { background:#4338ca; }
-  button.btn:disabled { opacity:.45; cursor:default; }
+    font-size:13px; font-weight:600; cursor:pointer; display:inline-flex; align-items:center; gap:6px; transition:all .15s; }
+  button.btn:hover { background:var(--accent-hover); }
+  button.btn:disabled { opacity:.5; cursor:default; }
   button.btn.secondary { background:#fff; color:var(--text); border:1px solid var(--line); }
   button.btn.secondary:hover { background:#f9fafb; }
   button.btn.green { background:var(--green); } button.btn.green:hover { background:#047857; }
   button.btn.danger { background:var(--red); } button.btn.danger:hover { background:#b91c1c; }
+  button.btn.ghost { background:transparent; color:var(--dim); border:1px solid var(--line); }
   button.btn.small { padding:4px 10px; font-size:12px; border-radius:7px; }
   label.fl { font-size:12px; color:var(--dim); display:block; margin-bottom:4px; font-weight:500; }
-  input.in, textarea.in { width:100%; padding:8px 11px; border:1px solid var(--line); border-radius:8px;
+  input.in, textarea.in, select.in { width:100%; padding:8px 11px; border:1px solid var(--line); border-radius:8px;
     font-size:13.5px; background:#fff; color:var(--text); }
-  input.in:focus, textarea.in:focus { outline:2px solid var(--accent-soft); border-color:var(--accent); }
+  input.in:focus, textarea.in:focus { outline:none; border-color:var(--accent); box-shadow:0 0 0 3px var(--accent-soft); }
   .form-grid { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
   .full { grid-column:1/-1; }
-  .searchbox { display:flex; align-items:center; gap:8px; padding:8px 12px; border-bottom:1px solid var(--line); }
-  .searchbox svg { flex:none; opacity:.45; }
 
   /* ---- guest detail ---- */
   .dhead { display:flex; align-items:center; gap:14px; padding:14px 18px; border-bottom:1px solid var(--line);
-    background:linear-gradient(180deg,#fbfbfd,#fff); }
+    background:linear-gradient(180deg,#fbfbfd,#fff); flex-wrap:wrap; }
   .dhead .avatar { width:44px; height:44px; font-size:15px; }
   .dactions { display:flex; gap:8px; flex-wrap:wrap; margin-left:auto; align-items:center; }
   .dtabs { display:flex; gap:2px; padding:0 12px; border-bottom:1px solid var(--line); background:#fbfbfd; }
   .dtabs button { background:none; border:none; padding:10px 14px; font-size:13px; font-weight:600;
     color:var(--dim); cursor:pointer; border-bottom:2px solid transparent; }
   .dtabs button.active { color:var(--accent); border-bottom-color:var(--accent); }
-  .dbody { padding:16px 18px; overflow-y:auto; max-height:calc(100vh - 240px); }
+  .dbody { padding:16px 18px; overflow-y:auto; max-height:calc(100vh - 250px); }
 
   /* ---- chat ---- */
   .chatwrap { display:flex; flex-direction:column; gap:10px; padding:6px 0; }
   .bubble { max-width:72%; padding:9px 13px; border-radius:14px; font-size:13.5px; line-height:1.45;
-    position:relative; box-shadow:var(--shadow); word-wrap:break-word; }
+    position:relative; box-shadow:var(--shadow); word-wrap:break-word; animation:pop .16s cubic-bezier(.2,.8,.3,1); }
+  @keyframes pop { from { opacity:0; transform:scale(.97) translateY(4px); } to { opacity:1; transform:none; } }
   .b-in { background:#fff; border:1px solid var(--line); border-bottom-left-radius:4px; align-self:flex-start; }
-  .b-out { background:var(--accent-soft); border:1px solid #e0e7ff; border-bottom-right-radius:4px; align-self:flex-end; }
+  .b-out { background:var(--accent-soft); border:1px solid var(--accent-line); border-bottom-right-radius:4px; align-self:flex-end; }
   .bmeta { font-size:10.5px; color:#9ca3af; margin-top:4px; display:flex; gap:6px; align-items:center; justify-content:flex-end; }
-  .bsys { align-self:center; font-size:11px; color:var(--dim); background:#f3f4f6; padding:3px 10px; border-radius:999px; }
+  .st-sent{color:#9ca3af}.st-delivered{color:var(--green)}.st-read{color:var(--purple)}.st-queued{color:var(--amber)}.st-failed{color:var(--red);font-weight:700}
   .composer { display:flex; gap:8px; padding:12px 0 4px; border-top:1px solid var(--line); margin-top:6px; }
   .window-note { font-size:11.5px; color:var(--amber); background:var(--amber-soft); padding:6px 10px;
     border-radius:8px; margin-top:8px; }
-  .st-sent{color:#9ca3af}.st-delivered{color:var(--green)}.st-read{color:#7e22ce}.st-queued{color:var(--amber)}.st-failed{color:var(--red);font-weight:700}
 
-  /* ---- timeline ---- */
+  /* ---- journey stepper ---- */
+  .jsteps { display:flex; flex-direction:column; gap:2px; margin-bottom:14px; }
+  .jstep { font-size:13px; padding:4px 0; color:var(--dim); display:flex; align-items:center; gap:8px; }
+  .jstep .jico { width:20px; height:20px; border-radius:50%; display:inline-flex; align-items:center; justify-content:center;
+    font-size:11px; font-weight:800; background:#f3f4f6; color:var(--faint); flex:none; }
+  .jstep.done { color:var(--text); font-weight:600; } .jstep.done .jdot { background:var(--green); color:#fff; }
+  .jstep.now { color:var(--accent); font-weight:700; } .jstep.now .jdot { background:var(--accent); color:#fff;
+    box-shadow:0 0 0 4px var(--accent-soft); animation:pulse-dot 2s infinite; }
+  @keyframes pulse-dot { 0% { box-shadow:0 0 0 0 rgba(99,102,241,.35);} 70% { box-shadow:0 0 0 8px rgba(99,102,241,0);} 100% { box-shadow:0 0 0 0 rgba(99,102,241,0);} }
+  .jstep-arrow { color:#cbd5e1; font-size:11px; padding-left:6px; line-height:1; }
   .tl-item { position:relative; padding:0 0 14px 20px; border-left:2px solid var(--line); margin-left:8px; }
   .tl-item:last-child { border-left-color:transparent; }
   .tl-item::before { content:''; position:absolute; left:-6px; top:3px; width:10px; height:10px;
     border-radius:50%; background:var(--accent); border:2px solid #fff; }
   .tl-item .t { color:var(--dim); font-size:11.5px; margin-top:2px; }
 
+  /* ---- menus / modals / toasts ---- */
+  .menu-wrap { position:relative; }
+  .menu { position:absolute; right:0; top:calc(100% + 4px); background:#fff; border:1px solid var(--line);
+    border-radius:10px; box-shadow:var(--shadow-lg); min-width:180px; z-index:60; overflow:hidden; animation:pop .16s cubic-bezier(.2,.8,.3,1.1); }
+  .menu button { display:flex; align-items:center; gap:9px; width:100%; background:none; border:none;
+    padding:9px 13px; font-size:13px; cursor:pointer; text-align:left; color:var(--text); }
+  .menu button:hover { background:#f6f7f9; }
+  .menu button.danger { color:var(--red); }
+  .menu .sep { height:1px; background:var(--line); }
+  @keyframes pop { from { opacity:0; transform:scale(.95) translateY(-4px); } to { opacity:1; transform:none; } }
+  .overlay { position:fixed; inset:0; background:rgba(15,23,42,.45); z-index:80; display:flex;
+    align-items:center; justify-content:center; animation:fade .15s; padding:16px; }
+  @keyframes fade { from { opacity:0; } to { opacity:1; } }
+  .modal { background:#fff; border-radius:14px; box-shadow:var(--shadow-lg); width:min(460px, 100%);
+    max-height:88vh; overflow-y:auto; animation:pop .18s cubic-bezier(.2,.8,.3,1.12); }
+  .modal .mh { padding:16px 20px 0; font-size:15.5px; font-weight:700; }
+  .modal .msub { color:var(--dim); font-size:12.5px; padding:4px 20px 0; }
+  .modal .mb { padding:14px 20px; }
+  .modal .mf { display:flex; justify-content:flex-end; gap:10px; padding:14px 20px; border-top:1px solid var(--line); }
+  .toasts { position:fixed; bottom:18px; right:18px; display:flex; flex-direction:column; gap:8px; z-index:120; }
+  .toast { background:#0f172a; color:#fff; padding:11px 16px; border-radius:11px; font-size:13px;
+    box-shadow:var(--shadow-lg); max-width:400px; display:flex; gap:10px; align-items:flex-start;
+    animation:tin .22s cubic-bezier(.2,.8,.3,1.1); }
+  .toast .tick { width:18px; height:18px; flex:none; border-radius:50%; background:#10b981; color:#fff;
+    display:flex; align-items:center; justify-content:center; font-size:11px; font-weight:800; margin-top:1px;
+    animation:pop .3s cubic-bezier(.2,.8,.3,1.3); }
+  .toast.err { background:var(--red); }
+  .toast.out { animation:fadeout .25s forwards; }
+  @keyframes tin { from { opacity:0; transform:translateY(10px) scale(.97); } to { opacity:1; transform:none; } }
+  @keyframes fade { from { opacity:0; } to { opacity:1; } }
+  @keyframes fadeout { to { opacity:0; transform:translateY(6px); } }
+
   /* ---- misc ---- */
   .empty { padding:36px 20px; text-align:center; color:var(--dim); font-size:13px; }
   .empty .big { font-size:15px; font-weight:600; color:var(--text); margin-bottom:4px; }
-  .toasts { position:fixed; bottom:18px; right:18px; display:flex; flex-direction:column; gap:8px; z-index:100; }
-  .toast { background:#111827; color:#fff; padding:10px 16px; border-radius:10px; font-size:13px;
-    box-shadow:0 8px 24px rgba(0,0,0,.25); max-width:380px; animation:tin .18s ease; }
-  .toast.err { background:var(--red); }
-  @keyframes tin { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:none; } }
+  .empty .act { margin-top:12px; }
   .preview-box { background:#dcf8c6; border-radius:4px 14px 14px 14px; padding:12px 14px;
-    font-size:13px; color:#111; line-height:1.5; white-space:pre-wrap; max-width:420px;
-    box-shadow:var(--shadow); font-family:inherit; }
+    font-size:13px; color:#111; line-height:1.5; white-space:pre-wrap; max-width:420px; box-shadow:var(--shadow); }
   .preview-label { font-size:11px; font-weight:700; color:var(--dim); text-transform:uppercase;
     letter-spacing:.4px; margin-bottom:6px; }
-  .section-h:first-child { margin-top:0; }
-  .section-h { font-size:12px; font-weight:700; color:var(--dim); text-transform:uppercase;
+  .section-h { font-size:11.5px; font-weight:700; color:var(--dim); text-transform:uppercase;
     letter-spacing:.4px; margin:18px 0 8px; }
-  .section-h:first-child { margin-top:0; }
   .jsteps { display:flex; flex-direction:column; gap:2px; margin-bottom:14px; }
-  .jstep { font-size:13px; padding:4px 0; color:var(--dim); }
-  .jstep.done { color:var(--green); font-weight:600; }
-  .jstep.now { color:var(--accent); font-weight:700; }
-  .jstep-arrow { color:#cbd5e1; font-size:11px; padding-left:6px; line-height:1; }
+  .jstep { font-size:13px; padding:4px 0; color:var(--dim); display:flex; align-items:center; gap:8px; }
+  .jstep.done { color:var(--green); font-weight:600; } .jstep.now { color:var(--accent); font-weight:700; }
+  .pulse { background:linear-gradient(135deg,#111827,#1e1b4b); color:#fff; border-radius:var(--radius);
+    padding:18px 20px; margin-bottom:16px; box-shadow:var(--shadow); position:relative; overflow:hidden; }
+  .pulse::after { content:''; position:absolute; right:-60px; top:-70px; width:220px; height:200px;
+    background:radial-gradient(circle,rgba(99,102,241,.35),transparent 65%); border-radius:50%; pointer-events:none; }
+  .pulse-head { display:flex; align-items:baseline; gap:12px; flex-wrap:wrap; }
+  .pulse-title { font-size:12px; font-weight:800; letter-spacing:.6px; color:#a5b4fc; text-transform:uppercase; }
+  .pulse-note { font-size:12.5px; color:#c7d2fe; }
+  .pulse .pct { margin-left:auto; font-size:24px; font-weight:800; letter-spacing:-.5px; }
+  .pulse-bar { height:8px; background:rgba(255,255,255,.14); border-radius:999px; overflow:hidden; margin-top:10px; }
+  .pulse-fill { height:100%; border-radius:999px; background:linear-gradient(90deg,#6366f1,#a78bfa);
+    transition:width .9s cubic-bezier(.2,.8,.3,1); }
+  .pulse-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(140px,1fr)); gap:8px; margin-top:12px; }
+  .pulse-item { background:rgba(255,255,255,.08); border:1px solid rgba(255,255,255,.1); border-radius:9px;
+    padding:8px 11px; font-size:12px; display:flex; align-items:center; gap:8px; }
+  .pulse-item .pi { font-weight:800; font-size:13px; }
+  .pulse-item.ok .pi { color:#34d399; } .pulse-item.wait .pi { color:#fbbf24; }
+  .pulse-item .pl { color:#c7d2fe; }
+  .stats { display:grid; grid-template-columns:repeat(auto-fit,minmax(168px,1fr)); gap:12px; margin-bottom:18px; }
+  .stat { background:var(--card); border:1px solid var(--line); border-radius:var(--radius);
+    padding:14px 16px; box-shadow:var(--shadow); transition:transform .15s, box-shadow .15s; position:relative; }
+  .stat:hover { transform:translateY(-2px); box-shadow:0 6px 18px rgba(16,24,40,.1); }
+  .stat .n { font-size:26px; font-weight:800; letter-spacing:-.5px; }
+  .stat .l { font-size:12px; color:var(--dim); margin-top:2px; font-weight:500; }
+  .stat .ic { width:30px; height:30px; border-radius:8px; display:flex; align-items:center; justify-content:center;
+    font-size:14px; position:absolute; top:13px; right:14px; }
+  .ic-accent{background:var(--accent-soft);color:var(--accent)} .ic-green{background:var(--green-soft);color:var(--green)}
+  .ic-amber{background:var(--amber-soft);color:var(--amber)} .ic-purple{background:var(--purple-soft);color:var(--purple)}
+  .ic-gray{background:#f3f4f6;color:var(--dim)}
 
   /* ---- gate ---- */
   #gate { max-width:400px; margin:90px auto; padding:28px; background:var(--card);
@@ -196,6 +366,7 @@
 <main>
   <!-- ================= TODAY ================= -->
   <section class="view" id="view-today">
+    <div class="pulse" id="ops-pulse"></div>
     <div class="stats" id="today-stats"></div>
     <div class="cols3">
       <div class="card">
@@ -221,11 +392,12 @@
         <h2>Guests <span class="count" id="guest-count"></span><span class="spacer"></span>
         <button class="btn secondary small" onclick="openAdd()">+ Add</button>
         <button class="btn secondary small" onclick="openBulkAdd()">+ Bulk</button>
-        <button class="btn secondary small" onclick="loadGuests()">&#8635;</button></h2>
+        <button class="btn secondary small" onclick="loadGuests()" title="Refresh">&#8635;</button></h2>
         <div class="searchbox">
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
           <input class="in" id="search" placeholder="Search name, phone, room…" style="border:none;padding:4px 0;background:transparent" oninput="renderGuestList()">
         </div>
+        <div class="chips" id="guest-filters"></div>
         <div class="list maxh-560" id="guest-list"></div>
       </div>
       <div class="card" id="detail-card">
@@ -250,15 +422,17 @@
             <div class="preview-label">Guests will receive</div>
             <div class="preview-box" id="act-preview">Fill in the activity to preview the message…</div>
           </div>
-          <div style="margin-top:14px;display:flex;align-items:center;gap:10px">
-            <button class="btn" onclick="postActivity()">Send to in-house guests</button>
-            <span style="font-size:12px;color:var(--dim)">Only guests currently at the property, if policy allows.</span>
+          <div style="margin-top:14px;display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+            <button class="btn" id="act-send-btn" onclick="postActivity(true)">Send to in-house guests</button>
+            <button class="btn ghost" id="act-draft-btn" onclick="postActivity(false)">Save for later</button>
+            <span style="font-size:12px;color:var(--dim)">Only in-house guests, if policy allows.</span>
           </div>
         </div>
       </div>
       <div class="card">
-        <h2>Recent activities <span class="count" id="activity-count"></span><span class="spacer"></span>
-          <button class="btn secondary small" onclick="loadActivities()">&#8635;</button></h2>
+        <h2>Activities <span class="count" id="activity-count"></span><span class="spacer"></span>
+          <button class="btn secondary small" onclick="loadActivities()" title="Refresh">&#8635;</button></h2>
+        <div class="chips" id="activity-filters"></div>
         <div class="list maxh-560" id="activity-list"></div>
       </div>
     </div>
@@ -266,6 +440,7 @@
 </main>
 
 <div class="toasts" id="toasts"></div>
+<div id="modal-root"></div>
 </div>
 
 <script>
@@ -274,7 +449,9 @@ let selectedId = null;
 let detailTab = 'chat';
 let currentView = 'today';
 let guestsCache = [];
-let overviewCache = null;
+let activitiesCache = [];
+let guestFilter = 'all';
+let activityFilter = 'all';
 
 function token() { return localStorage.getItem(KEY) || ''; }
 function saveToken() { localStorage.setItem(KEY, document.getElementById('token-input').value.trim()); boot(); }
@@ -300,14 +477,7 @@ function avatar(name, size) {
   const initials = String(name||'?').trim().split(/\s+/).map(w => w[0]).slice(0,2).join('').toUpperCase();
   return `<div class="avatar" style="background:hsl(${hue(name)},55%,48%)${size?';width:'+size+'px;height:'+size+'px':''}">${esc(initials)}</div>`;
 }
-function stateBadge(s) { return `<span class="badge b-${s}">${esc(String(s||'').replace(/_/g,' '))}</span>`; }
-function toast(text, err) {
-  const el = document.createElement('div');
-  el.className = 'toast' + (err ? ' err' : '');
-  el.textContent = text;
-  document.getElementById('toasts').appendChild(el);
-  setTimeout(() => el.remove(), 6000);
-}
+function stateBadge(s) { return `<span class="badge b-${esc(s)}"><span class="bdot"></span>${esc(String(s||'').replace(/_/g,' '))}</span>`; }
 function showGate(msg) {
   document.getElementById('gate').style.display = 'block';
   document.getElementById('app').style.display = 'none';
@@ -317,6 +487,59 @@ function showGate(msg) {
 function lastInboundMs(messages) {
   const inbound = messages.find(m => m.direction === 'in');
   return inbound ? new Date(inbound.created_at).getTime() : null;
+}
+function istToday() {
+  return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(new Date());
+}
+function addDays(iso, n) { const d = new Date(iso + 'T12:00:00Z'); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0,10); }
+
+/* ---------- toasts ---------- */
+function toast(text, err) {
+  const el = document.createElement('div');
+  el.className = 'toast' + (err ? ' err' : '');
+  el.innerHTML = err ? `<span style="font-size:15px">⚠️</span><span>${esc(text)}</span>`
+                     : `<span class="tick">✓</span><span>${esc(text)}</span>`;
+  document.getElementById('toasts').appendChild(el);
+  setTimeout(() => { el.classList.add('out'); setTimeout(() => el.remove(), 260); }, err ? 7000 : 4200);
+}
+function celebrate(text) { toast('✨ ' + text); confettiBurst(); }
+function confettiBurst() {
+  const colors = ['#6366f1','#8b5cf6','#10b981','#f59e0b','#ec4899'];
+  for (let i = 0; i < 24; i++) {
+    const c = document.createElement('div');
+    const x = window.innerWidth - 120 - Math.random() * 180;
+    c.style.cssText = `position:fixed;z-index:300;left:${x}px;top:64px;width:7px;height:7px;border-radius:2px;
+      background:${colors[i % colors.length]};pointer-events:none;opacity:1;transition:all .9s cubic-bezier(.2,.8,.3,1)`;
+    document.body.appendChild(c);
+    requestAnimationFrame(() => {
+      c.style.transform = `translate(${(Math.random()-0.5)*240}px, ${120+Math.random()*180}px) rotate(${Math.random()*540}deg)`;
+      c.style.opacity = '0';
+    });
+    setTimeout(() => c.remove(), 1100);
+  }
+}
+
+/* ---------- confirm dialog ---------- */
+function confirmDialog({ title, message, confirmText = 'Confirm', danger }) {
+  return new Promise((resolve) => {
+    const wrap = document.createElement('div');
+    wrap.className = 'overlay';
+    wrap.innerHTML = `
+      <div class="modal">
+        <div class="mh">${esc(title)}</div>
+        <div class="msub">${esc(message)}</div>
+        <div class="mf">
+          <button class="btn ghost" data-x="cancel">Cancel</button>
+          <button class="btn ${danger ? 'danger' : ''}" data-x="ok">${esc(confirmText)}</button>
+        </div>
+      </div>`;
+    wrap.addEventListener('click', (e) => {
+      if (e.target === wrap) { wrap.remove(); resolve(false); }
+      if (e.target.dataset?.x === 'cancel') { wrap.remove(); resolve(false); }
+      if (e.target.dataset?.x === 'ok') { wrap.remove(); resolve(true); }
+    });
+    document.getElementById('modal-root').appendChild(wrap);
+  });
 }
 
 /* ---------- boot & views ---------- */
@@ -328,7 +551,7 @@ async function boot() {
     document.getElementById('app').style.display = 'block';
     document.getElementById('conn-status').classList.remove('err');
     document.getElementById('conn-status').textContent = 'connected';
-    document.getElementById('act-date').value = new Date().toISOString().slice(0,10);
+    document.getElementById('act-date').value = istToday();
     switchView('today');
     setInterval(refreshAll, 15000);
   } catch {
@@ -357,14 +580,15 @@ async function loadOverview() {
   try {
     const d = await api('/overview');
     overviewCache = d;
+    renderPulse(d);
     const s = d.stats;
     document.getElementById('today-stats').innerHTML = `
-      <div class="stat green"><div class="n">${d.inHouse.length}</div><div class="l">In the property now</div></div>
-      <div class="stat accent"><div class="n">${d.arrivals.length}</div><div class="l">Arriving today</div></div>
-      <div class="stat amber"><div class="n">${d.departures.length}</div><div class="l">Checking out today</div></div>
-      <div class="stat"><div class="n">${s.sent_today}</div><div class="l">Messages sent today</div></div>
-      <div class="stat"><div class="n">${s.received_today}</div><div class="l">Replies received today</div></div>
-      <div class="stat"><div class="n">${s.activities_today}</div><div class="l">Activities posted today</div></div>`;
+      <div class="stat"><span class="ic ic-green">🏠</span><div class="n">${d.inHouse.length}</div><div class="l">In the property now</div></div>
+      <div class="stat"><span class="ic ic-accent">🛬</span><div class="n c-accent">${d.arrivals.length}</div><div class="l">Arriving today</div></div>
+      <div class="stat"><span class="ic ic-amber">🛫</span><div class="n c-amber">${d.departures.length}</div><div class="l">Checking out today</div></div>
+      <div class="stat"><span class="ic ic-accent">✉️</span><div class="n">${s.sent_today}</div><div class="l">Messages sent today</div></div>
+      <div class="stat"><span class="ic ic-purple">💬</span><div class="n">${s.received_today}</div><div class="l">Replies received</div></div>
+      <div class="stat"><span class="ic ic-accent">🎉</span><div class="n">${s.activities_today}</div><div class="l">Activities posted</div></div>`;
     document.getElementById('c-arrivals').textContent = '(' + d.arrivals.length + ')';
     document.getElementById('c-departures').textContent = '(' + d.departures.length + ')';
     document.getElementById('c-inhouse').textContent = '(' + d.inHouse.length + ')';
@@ -372,6 +596,35 @@ async function loadOverview() {
     document.getElementById('today-departures').innerHTML = peopleList(d.departures, 'No check-outs today.', false, true);
     document.getElementById('today-inhouse').innerHTML = peopleList(d.inHouse, 'Nobody in the property right now.', false, false, true);
   } catch (e) { toast(e.message, true); }
+}
+
+function renderPulse(d) {
+  const arrivals = d.arrivals.length;
+  const arrivalsDone = d.arrivals.filter(g => !['booked','pre_arrival'].includes(g.journey_state)).length;
+  const departures = d.departures.length;
+  const departuresDone = d.departures.filter(g => !['checked_in','in_stay','checkout_pending'].includes(g.journey_state)).length;
+  const total = arrivals + departures;
+  const done = arrivalsDone + departuresDone;
+  const pct = total === 0 ? 100 : Math.round(done / total * 100);
+  const allDone = total > 0 && done === total;
+  const headline = total === 0 ? 'Property is quiet — everything handled ✨'
+    : allDone ? "All of today's operations are handled ✨"
+    : `${done} of ${total} guest journeys handled today`;
+  document.getElementById('ops-pulse').innerHTML = `
+    <div class="pulse-head">
+      <span class="pulse-title">TODAY'S OPERATIONS</span>
+      <span class="pulse-msg">${esc(headline)}</span>
+      <span class="pct">${pct}%</span>
+    </div>
+    <div class="pulse-bar"><div class="pulse-fill" style="width:${pct}%"></div></div>
+    <div class="pulse-grid">
+      <div class="pulse-item ${arrivals ? (arrivalsDone ? 'ok' : 'wait') : 'ok'}">
+        <span class="pi">${arrivals ? (arrivalsDone ? '✓' : arrivals) : '✓'}</span><span class="pl">Arrivals ${arrivalsDone ? 'handled' : 'pending'}</span></div>
+      <div class="pulse-item ${departures ? (departuresDone ? 'ok' : 'wait') : 'ok'}">
+        <span class="pi">${departures ? departuresDone + '/' + departures : '✓'}</span><span class="pl">Checkouts</span></div>
+      <div class="pulse-item ${d.stats.activities_today ? 'ok' : 'ok'}"><span class="pi">${d.stats.activities_today}</span><span class="pl">activities posted</span></div>
+      <div class="pulse-item"><span class="pi">${d.stats.sent_today}</span><span class="pl">messages sent</span></div>
+    </div>`;
 }
 
 function peopleList(rows, emptyText, checkin, checkout, viewChat) {
@@ -392,15 +645,17 @@ function peopleList(rows, emptyText, checkin, checkout, viewChat) {
 async function doCheckin(id) {
   try {
     await api('/guests/' + id + '/checkin', { method: 'POST' });
-    toast('Guest checked in. Check-in confirmation flow continues automatically.');
+    celebrate('Guest checked in — welcome journey activated');
     loadOverview();
+    if (selectedId === id) refreshDetail();
   } catch (e) { toast(e.message, true); }
 }
 async function doCheckout(id) {
-  if (!confirm('Check this guest out? This sends the review request message and moves the journey forward.')) return;
+  const ok = await confirmDialog({ title: 'Check this guest out?', message: 'This sends the review request message and moves the journey forward.', confirmText: 'Check out' });
+  if (!ok) return;
   try {
     await api('/guests/' + id + '/checkout', { method: 'POST' });
-    toast('Guest checked out. Review request queued automatically.');
+    toast('Guest checked out — review request queued automatically.');
     loadOverview();
   } catch (e) { toast(e.message, true); }
 }
@@ -410,17 +665,14 @@ function openGuest(id) { switchView('guests'); selectGuest(id); }
 async function loadGuests() {
   try {
     guestsCache = await api('/guests');
+    renderGuestFilters();
     renderGuestList();
   } catch (e) { document.getElementById('conn-status').textContent = 'error'; }
 }
 
-function istToday() {
-  return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(new Date());
-}
 function nextCommunication(g) {
   if (g.ai_paused) return 'Automation paused';
   const today = istToday();
-  const tomorrow = new Date(Date.now() + 24*3600*1000).toISOString().slice(0,10);
   switch (g.journey_state) {
     case 'booked':
       if (g.check_in === today) return 'Welcome message · today 10:00 AM';
@@ -442,28 +694,51 @@ function nextCommunication(g) {
       return '—';
   }
 }
-function addDays(iso, n) { const d = new Date(iso + 'T12:00:00Z'); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0,10); }
+
+function setGuestFilter(f) { guestFilter = f; renderGuestFilters(); renderGuestList(); }
 
 function renderGuestList() {
   const q = (document.getElementById('search').value || '').toLowerCase().trim();
-  const rows = guestsCache.filter(g =>
+  let rows = guestsCache.filter(g =>
     !q || g.name.toLowerCase().includes(q) || g.phone.includes(q) || String(g.room||'').toLowerCase().includes(q));
+  if (guestFilter !== 'all') rows = rows.filter(g => g.journey_state === guestFilter);
   document.getElementById('guest-count').textContent = '(' + rows.length + ')';
-  document.getElementById('guest-list').innerHTML = rows.length === 0
-    ? `<div class="empty"><div class="big">No guests found</div>${q ? 'Try a different search.' : 'Add your first guest.'}</div>`
-    : rows.map(g => `
-      <div class="prow clickable ${g.id===selectedId?'selected':''}" onclick="selectGuest(${g.id})">
-        ${avatar(g.name)}
-        <div class="pmain">
-          <div class="pname">${esc(g.name)}
-            ${g.ai_paused ? '<span class="flag-paused">AI PAUSED</span>' : ''}
-            ${g.activities_opt_out ? '<span class="flag-optout">NO ACTIVITIES</span>' : ''}
-          </div>
-          <div class="pmeta">+${esc(g.phone)} &middot; ${g.room ? 'Room ' + esc(g.room) + ' &middot; ' : ''}${fmtDate(g.check_in)} &rarr; ${fmtDate(g.check_out)}</div>
-          <div class="pmeta" style="color:var(--accent)">Next: ${esc(nextCommunication(g))}</div>
+  const el = document.getElementById('guest-list');
+  if (rows.length === 0) {
+    el.innerHTML = `<div class="empty"><div class="big">${q || guestFilter !== 'all' ? 'No guests match' : 'No guests yet'}</div>
+      ${q || guestFilter !== 'all' ? 'Try a different search or filter.' : 'Add your first guest — their journey starts instantly.'}
+      ${!q && guestFilter === 'all' ? '<div style="margin-top:12px"><button class="btn small" onclick="openAdd()">+ Add guest</button></div>' : ''}</div>`;
+    return;
+  }
+  el.innerHTML = rows.map(g => `
+    <div class="prow clickable ${g.id===selectedId?'selected':''}" onclick="selectGuest(${g.id})">
+      ${avatar(g.name)}
+      <div class="pmain">
+        <div class="pname">${esc(g.name)}
+          ${g.ai_paused ? '<span class="flag-paused">AI PAUSED</span>' : ''}
+          ${g.activities_opt_out ? '<span class="flag-optout">NO ACT</span>' : ''}
         </div>
+        <div class="pmeta">+${esc(g.phone)} &middot; ${g.room ? 'Room ' + esc(g.room) + ' &middot; ' : ''}${fmtDate(g.check_in)} &rarr; ${fmtDate(g.check_out)}</div>
+        <div class="jbar" title="Journey ${journeyPct(g)}%"><div style="width:${journeyPct(g)}%"></div></div>
+        <div class="pmeta" style="color:var(--accent)">Next: ${esc(nextCommunication(g))}</div>
+      </div>
+      <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px">
         ${stateBadge(g.journey_state)}
-      </div>`).join('');
+        <span class="jpct" style="font-size:10.5px;color:var(--faint);font-weight:700">${journeyPct(g)}%</span>
+      </div>
+    </div>`).join('');
+}
+
+const GUEST_FILTERS = [['all','All'],['booked','Booked'],['pre_arrival','Pre-arrival'],['checked_in','Checked in'],['in_stay','In stay'],['checkout_pending','Checkout pending'],['checked_out','Checked out'],['review_requested','Review requested']];
+
+function renderGuestFilters() {
+  const counts = {};
+  for (const g of guestsCache) counts[g.journey_state] = (counts[g.journey_state] || 0) + 1;
+  document.getElementById('guest-filters').innerHTML = GUEST_FILTERS.map(([key, label]) => {
+    const n = key === 'all' ? guestsCache.length : (counts[key] || 0);
+    if (key !== 'all' && !counts[key]) return '';
+    return `<button class="chip ${guestFilter===key?'active':''}" onclick="setGuestFilter('${key}')">${label}${key!=='all' ? ' · ' + n : ''}</button>`;
+  }).join('');
 }
 
 async function selectGuest(id) {
@@ -491,10 +766,17 @@ async function refreshDetail(quiet) {
         <div class="pmeta">+${esc(g.phone)} &middot; guest #${g.id} &middot; proactive today: ${g.proactive_today ?? 0}</div>
       </div>
       <div class="dactions">
-        ${canCheckin ? `<button class="btn green small" onclick="doCheckin(${g.id});refreshDetail()">Check in</button>` : ''}
+        ${canCheckin ? `<button class="btn green small" onclick="doCheckin(${g.id})">Check in</button>` : ''}
         ${canCheckout ? `<button class="btn small" onclick="dashboardCheckout(${g.id})">Check out</button>` : ''}
         <button class="btn ${g.ai_paused?'':'danger'} small" onclick="togglePause(${g.id},${g.ai_paused})">${g.ai_paused?'Resume AI':'Pause AI'}</button>
         <button class="btn secondary small" onclick="toggleActivities(${g.id},${g.activities_opt_out})">${g.activities_opt_out?'Activities off':'Activities on'}</button>
+        <button class="btn secondary small" onclick="openEditGuest(${g.id})" title="Edit guest">✏️</button>
+      </div>
+    </div>
+    <div style="padding:10px 18px 0">${journeyBar(g)}
+      <div style="display:flex;align-items:center;gap:8px;margin-top:7px">
+        ${stateBadge(g.journey_state)}
+        <span style="font-size:11.5px;color:var(--faint)">Journey ${journeyPct(g)}% · Next: ${esc(nextCommunication(g))}</span>
       </div>
     </div>
     <div class="dtabs">
@@ -511,9 +793,12 @@ function setTab(t) {
   refreshDetail().catch(()=>{});
 }
 async function dashboardCheckout(id) {
-  if (!confirm('Check this guest out? This sends the review request message.')) return;
-  try { await api('/guests/' + id + '/checkout', { method: 'POST' }); toast('Checked out. Review request queued.'); }
-  catch (e) { toast(e.message, true); }
+  const ok = await confirmDialog({ title: 'Check this guest out?', message: 'This sends the review request message and completes the journey.', confirmText: 'Check out' });
+  if (!ok) return;
+  try {
+    await api('/guests/' + id + '/checkout', { method: 'POST' });
+    celebrate('Guest journey completed — review request queued');
+  } catch (e) { toast(e.message, true); }
   refreshDetail().catch(()=>{});
   loadGuests();
 }
@@ -545,20 +830,24 @@ function renderChat(d) {
     <div class="chatwrap">${bubbles}</div>
     <div class="composer">
       <input class="in" id="reply-text" placeholder="Type a message to this guest…" value="${esc(existing)}" onkeydown="if(event.key==='Enter')sendReply(${d.guest.id})">
-      <button class="btn" onclick="sendReply(${d.guest.id})">Send</button>
+      <button class="btn" id="send-btn" onclick="sendReply(${d.guest.id})">Send</button>
     </div>
     ${windowOpen ? '' : '<div class="window-note">No guest message in the last 24h — WhatsApp may reject free-text outside the session window. Template messages are unaffected.</div>'}`;
 }
 
 async function sendReply(id) {
   const input = document.getElementById('reply-text');
+  const btn = document.getElementById('send-btn');
   const content = input.value.trim();
   if (!content) return;
+  btnLoading('send-btn', true);
   try {
     await api('/guests/' + id + '/messages', { method: 'POST', body: JSON.stringify({ content }) });
     input.value = '';
+    toast('Message sent');
     refreshDetailQuiet();
   } catch (e) { toast(e.message, true); }
+  btnLoading('send-btn', false);
 }
 
 function renderProfile(g) {
@@ -571,28 +860,36 @@ function renderProfile(g) {
       <div><label class="fl">Check-in</label><input type="date" class="in" id="f-checkin" value="${esc(g.check_in||'')}"></div>
       <div><label class="fl">Check-out</label><input type="date" class="in" id="f-checkout" value="${esc(g.check_out||'')}"></div>
     </div>
-    <div style="margin-top:16px"><button class="btn" onclick="saveGuest(${g.id})">Save changes</button>
-      <span style="font-size:12px;color:var(--dim);margin-left:10px">Phone changes take effect from the next message.</span></div>`;
+    <div style="margin-top:16px;display:flex;align-items:center;gap:10px">
+      <button class="btn" id="save-guest-btn" onclick="saveGuest(${g.id})">Save changes</button>
+      <button class="btn danger ghost" onclick="openDeleteGuest(${g.id},'${esc(g.name)}')" style="margin-left:auto">Delete guest</button>
+    </div>
+    <div style="font-size:12px;color:var(--dim);margin-top:10px">Phone changes take effect from the next message.</div>`;
 }
 
 function renderJourney(d) {
   const g = d.guest;
   const has = (tpl) => d.messages.some(m => m.template_name === tpl && ['sent','delivered','read'].includes(m.status));
   const inHouse = ['checked_in','in_stay','checkout_pending'].includes(g.journey_state);
+  const stateOrder = ['booked','pre_arrival','checked_in','in_stay','checkout_pending','checked_out','review_requested','closed'];
+  const atLeast = (s) => stateOrder.indexOf(g.journey_state) >= stateOrder.indexOf(s);
   const steps = [
     { label: 'Booking confirmed', done: has('booking_confirmation') },
-    { label: 'Pre-arrival sent', done: has('checkin_info') },
-    { label: 'Welcome sent', done: has('welcome') },
+    { label: 'Pre-arrival sent', done: has('checkin_info') || ['checked_in','in_stay','checkout_pending','checked_out','review_requested','closed'].includes(g.journey_state) },
     { label: 'Checked in', done: ['checked_in','in_stay','checkout_pending','checked_out','review_requested','closed'].includes(g.journey_state) },
-    { label: 'In-house activities', done: false, active: inHouse && !g.activities_opt_out && !g.ai_paused, note: inHouse ? 'eligible' : '' },
+    { label: 'In-house stay', done: ['checkout_pending','checked_out','review_requested','closed'].includes(g.journey_state), active: inHouse },
     { label: 'Checkout reminder', done: has('checkout_reminder') },
     { label: 'Review request', done: has('review_request') },
+    { label: 'Journey closed', done: g.journey_state === 'closed' },
   ];
-  const stepper = steps.map(s => `
-    <div class="tl-item" style="${s.done?'border-left-color:#059669':''}">
-      <b>${s.done ? '✓ ' : s.active ? '→ ' : '○ '}${esc(s.label)}</b>${s.active ? ` <span class="badge b-checked_in">now</span>` : ''}
-      ${s.detail ? `<div class="t">${esc(s.detail)}</div>` : ''}
-    </div>`).join('');
+  const pct = journeyPct(g);
+  const stepper = `
+    <div class="progress" style="margin-bottom:14px"><div class="jbar-fill" style="width:${pct}%"></div></div>
+    <div class="jsteps">${steps.map(s => `
+      <div class="jstep ${s.done?'done':s.active?'now':''}">
+        <span class="jstep-ic">${s.done ? '✓' : s.active ? '●' : '○'}</span> ${esc(s.label)}
+        ${s.active ? '<span class="badge b-checked_in">now</span>' : ''}
+      </div>`).join('')}</div>`;
   const events = d.events.map(e => `
     <div class="tl-item">
       ${e.from_state ? esc(e.from_state) + ' &rarr; ' : ''}<b>${esc(e.to_state)}</b>
@@ -601,9 +898,7 @@ function renderJourney(d) {
     </div>`).join('');
   const reqs = d.requests.length === 0 ? '<div style="color:var(--dim);font-size:13px">No service requests.</div>' :
     d.requests.map(r => `<div class="tl-item"><b>${esc(r.request_type)}</b> — ${esc(r.status)} <span style="color:var(--dim)">${esc(r.description||'')}</span><div class="t">${fmtTs(r.created_at)}</div></div>`).join('');
-  return `<div class="section-h">Journey progress</div>
-    <div class="jsteps">${steps.map(s => `
-      <div class="jstep ${s.done?'done':s.active?'now':''}">${s.done?'✓':s.active?'→':'○'} ${esc(s.label)}</div>`).join('<div class="jstep-arrow">↓</div>')}</div>
+  return `<div class="section-h">Journey progress — ${pct}%</div>${stepper}
     <div class="section-h">Audit trail (append-only)</div>${events || '<div style="color:var(--dim)">No events yet.</div>'}
     <div class="section-h">Service requests</div>${reqs}`;
 }
@@ -612,22 +907,6 @@ async function retryMessage(id) {
   try {
     await api('/messages/' + id + '/retry', { method: 'POST' });
     toast('Message re-queued and dispatched.');
-    refreshDetailQuiet();
-  } catch (e) { toast(e.message, true); }
-}
-
-async function saveGuest(id) {
-  const body = {
-    name: document.getElementById('f-name').value,
-    phone: document.getElementById('f-phone').value,
-    room: document.getElementById('f-room').value,
-    check_in: document.getElementById('f-checkin').value || null,
-    check_out: document.getElementById('f-checkout').value || null,
-  };
-  try {
-    await api('/guests/' + id, { method: 'PATCH', body: JSON.stringify(body) });
-    toast('Saved.');
-    loadGuests();
     refreshDetailQuiet();
   } catch (e) { toast(e.message, true); }
 }
@@ -647,6 +926,62 @@ async function toggleActivities(id, optedOut) {
   } catch (e) { toast(e.message, true); }
 }
 
+/* ---------- edit / delete guest ---------- */
+function openEditGuest(id) {
+  const g = guestsCache.find(x => x.id === id);
+  if (!g) return;
+  openModal(`
+    <h3>Edit guest</h3>
+    <div class="msub">Changes apply immediately. Phone changes take effect from the next message.</div>
+    <div class="mbody">
+      <div class="form-grid">
+        <div><label class="fl">Full name</label><input class="in" id="e-name" value="${esc(g.name)}"></div>
+        <div><label class="fl">WhatsApp number</label><input class="in" id="e-phone" value="${esc(g.phone)}"></div>
+        <div><label class="fl">Room</label><input class="in" id="e-room" value="${esc(g.room||'')}"></div>
+        <div><label class="fl">Journey state (automatic)</label><input class="in" value="${esc(g.journey_state)}" disabled style="background:#f9fafb"></div>
+        <div><label class="fl">Check-in</label><input type="date" class="in" id="f-checkin" value="${esc(g.check_in||'')}"></div>
+        <div><label class="fl">Check-out</label><input type="date" class="in" id="f-checkout" value="${esc(g.check_out||'')}"></div>
+      </div>
+    </div>
+    <div class="mf">
+      <button class="btn ghost" onclick="closeModal()">Cancel</button>
+      <button class="btn" id="save-guest-btn" onclick="saveGuest(${g.id})">Save changes</button>
+    </div>`);
+}
+async function saveGuest(id) {
+  const body = {
+    name: document.getElementById('f-name').value,
+    phone: document.getElementById('f-phone').value,
+    room: document.getElementById('f-room').value,
+    check_in: document.getElementById('f-checkin').value || null,
+    check_out: document.getElementById('f-checkout').value || null,
+  };
+  try {
+    await api('/guests/' + id, { method: 'PATCH', body: JSON.stringify(body) });
+    closeModal();
+    toast('Guest updated ✓');
+    loadGuests();
+    refreshDetailQuiet();
+  } catch (e) { toast(e.message, true); }
+}
+
+async function deleteGuest(id, name) {
+  const ok = await confirmDialog({
+    title: 'Delete guest?',
+    message: `"${name}" will be removed from the operations dashboard. Their message history stays in the audit trail. This action cannot be undone.`,
+    confirmText: 'Delete guest',
+    danger: true,
+  });
+  if (!ok) return;
+  try {
+    await api('/guests/' + id, { method: 'DELETE' });
+    toast(`Guest "${name}" removed from the dashboard.`);
+    if (selectedId === id) { selectedId = null; document.getElementById('detail').innerHTML = '<div class="empty"><div class="big">No guest selected</div>Pick a guest to see their chat, journey, and profile.</div>'; }
+    loadGuests();
+  } catch (e) { toast(e.message, true); }
+}
+
+/* ---------- add / bulk add ---------- */
 function openAdd() {
   selectedId = null;
   renderGuestList();
@@ -669,7 +1004,7 @@ function openAdd() {
           </label>
         </div>
       </div>
-      <div style="margin-top:16px"><button class="btn" onclick="addGuest()">Add booking</button></div>
+      <div style="margin-top:16px"><button class="btn" id="add-guest-btn" onclick="addGuest()">Add booking</button></div>
     </div>`;
 }
 
@@ -683,7 +1018,7 @@ function openBulkAdd() {
       <label class="fl">Paste your guest list (comma separated)</label>
       <textarea class="in" id="bulk-text" rows="9" placeholder="Rahul Sharma, 919876543210, 203, 2026-09-19, 2026-09-21&#10;Priya Patel, 919876543211, 204, 2026-09-19, 2026-09-23"></textarea>
       <div style="margin-top:12px;display:flex;align-items:center;gap:10px">
-        <button class="btn" onclick="bulkAdd()">Add all guests</button>
+        <button class="btn" id="bulk-btn" onclick="bulkAdd()">Add all guests</button>
         <span class="count" style="align-self:center">Every guest must have opted in to WhatsApp updates.</span>
       </div>
       <div id="bulk-progress" style="margin-top:10px;font-size:13px;color:var(--dim)"></div>
@@ -703,24 +1038,25 @@ async function bulkAdd() {
     const [name, phone, room, checkin, checkout] = parts;
     const body = {
       name: name || '',
-      phone: (phone||'').replace(/\D/g,''),
+      phone: (phone||'').replace(/\\D/g,''),
       room: room || null,
       check_in: checkin || null,
       check_out: (checkout||'') || null,
       whatsapp_opt_in: true,
     };
     try {
-      const r = await api('/guests', { method: 'POST', body: JSON.stringify(body) });
+      await api('/guests', { method: 'POST', body: JSON.stringify(body) });
       okCount++;
     } catch (e) {
       failed.push(`Line ${i+1} (${name||'?'}): ${e.message}`);
     }
-    prog.textContent = `Processing ${i+1}/${lines.length}…`;
+    prog.innerHTML = `<div class="progress" style="max-width:280px"><div class="jbar-fill" style="width:${Math.round((i+1)/lines.length*100)}%"></div></div>
+      <div style="margin-top:5px">Processing ${i+1}/${lines.length}…</div>`;
   }
   loadGuests();
   prog.textContent = `Done — ${okCount} added, ${failed.length} failed.`;
   if (failed.length) toast(`${okCount} added, ${failed.length} failed. First error: ${failed[0]}`, true);
-  else toast(`Added ${okCount} guests — confirmations are going out.`);
+  else celebrate(`Added ${okCount} guests — confirmations are going out`);
 }
 
 async function addGuest() {
@@ -737,30 +1073,167 @@ async function addGuest() {
     if (r.transitioned === false) {
       toast(`Guest #${r.guestId} saved, but no confirmation was sent: the guest is already at "${(r.reason||'').replace('invalid_transition:','').split('+')[1] || r.reason}" stage. Booking confirmations only send to new bookings.`);
     } else {
-      toast('Added ' + body.name + ' — booking confirmation is on its way.');
+      celebrate(`Guest journey started — confirmation on its way to ${body.name}`);
     }
     loadGuests();
     selectGuest(r.guestId);
   } catch (e) { toast(e.message, true); }
 }
 
+
+/* ---------- journey progress ---------- */
+const JOURNEY_PCT = { booked:12, pre_arrival:25, checked_in:45, in_stay:58, checkout_pending:70, checked_out:82, review_requested:92, closed:100 };
+function journeyPct(g) { return JOURNEY_PCT[g.journey_state] ?? 0; }
+function journeyBar(g) {
+  const pct = journeyPct(g);
+  return `<div class="progress" title="Journey ${pct}%"><div class="jbar-fill" style="width:${pct}%"></div></div>`;
+}
+
+/* ---------- modal + button helpers ---------- */
+function closeModal() { document.querySelectorAll('.overlay').forEach(m => m.remove()); }
+function btnLoading(id, on) {
+  const b = document.getElementById(id);
+  if (!b) return;
+  if (b.dataset.orig === undefined) b.dataset.orig = b.innerHTML;
+  if (on) { b.disabled = true; b.innerHTML = '<span class="spin"></span> Working…'; }
+  else { b.disabled = false; b.innerHTML = b.dataset.orig; }
+}
+
+/* ---------- activity edit / cancel ---------- */
+
+function openEditActivity(a) {
+  const overlay = document.createElement('div');
+  overlay.className = 'overlay';
+  overlay.innerHTML = `
+    <div class="modal">
+      <div class="mh">Edit activity</div>
+      <div class="mb">
+        <div class="form-grid">
+          <div><label class="fl">Date</label><input type="date" class="in" id="ea-date" value="${a.date}"></div>
+          <div><label class="fl">Time</label><input class="in" id="ea-time" value="${esc(a.time)}"></div>
+          <div class="full"><label class="fl">Event name</label><input class="in" id="ea-name" value="${esc(a.event_name)}"></div>
+          <div class="full"><label class="fl">Description</label><input class="in" id="ea-desc" value="${esc(a.description || '')}"></div>
+        </div>
+      </div>
+      <div class="mf">
+        <button class="btn ghost" onclick="closeModal()">Cancel</button>
+        <button class="btn" id="ea-save-btn" onclick="saveActivityEdit(${a.id})">Save changes</button>
+      </div>`;
+  document.getElementById('modal-root').appendChild(overlay);
+}
+async function saveActivityEdit(id) {
+  const body = {
+    date: document.getElementById('ea-date').value,
+    time: document.getElementById('ea-time').value,
+    eventName: document.getElementById('ea-name').value,
+    description: document.getElementById('ea-desc').value || null,
+  };
+  btnLoading('ea-save-btn', true);
+  try {
+    await api('/activities/' + id, { method: 'PATCH', body: JSON.stringify(body) });
+    closeModal();
+    toast('Activity updated ✓');
+    loadActivities();
+  } catch (e) { toast(e.message, true); }
+  btnLoading('ea-save-btn', false);
+}
+
+async function editActivity(id) {
+  const a = activitiesCache.find(x => x.id === id);
+  if (!a) return;
+  openEditActivity(a);
+}
+async function cancelActivity(id) {
+  const ok = await confirmDialog({ title: 'Cancel this activity?', message: 'It stays in the list marked as cancelled. It will not be sent.', confirmText: 'Cancel activity', danger: true });
+  if (!ok) return;
+  try {
+    await api('/activities/' + id, { method: 'PATCH', body: JSON.stringify({ status: 'cancelled' }) });
+    toast('Activity cancelled.');
+    loadActivities();
+  } catch (e) { toast(e.message, true); }
+}
+
 /* ---------- ACTIVITIES ---------- */
 async function loadActivities() {
   try {
-    const rows = await api('/activities');
-    document.getElementById('activity-count').textContent = '(' + rows.length + ')';
-    document.getElementById('activity-list').innerHTML = rows.length === 0
-      ? '<div class="empty"><div class="big">No activities yet</div>Post your first one — in-house guests get it on WhatsApp instantly.</div>'
-      : rows.map(a => `
-        <div class="prow">
-          <div class="pmain">
-            <div class="pname">${esc(a.event_name)} <span style="color:var(--dim);font-weight:400">&middot; ${esc(a.time)} &middot; ${fmtDate(a.date)}</span></div>
-            <div class="pmeta">${esc(a.description || '')}</div>
-          </div>
-          <span class="badge b-checked_in">sent to ${a.sent_count}</span>
-        </div>`).join('');
+    activitiesCache = await api('/activities');
+    renderActivityFilters();
+    renderActivityList();
   } catch (e) { toast(e.message, true); }
 }
+
+function activityStatusBadge(a) {
+  if (a.sent_at || a.status === 'active') return `<span class="badge b-active"><span class="bdot"></span>Sent ✓</span>`;
+  if (a.status === 'cancelled') return `<span class="badge b-cancelled">Cancelled</span>`;
+  if (a.status === 'scheduled') return `<span class="badge b-scheduled">Scheduled</span>`;
+  return `<span class="badge b-draft">Draft</span>`;
+}
+
+function renderActivityFilters() {
+  const counts = {};
+  for (const a of activitiesCache) {
+    const key = (a.sent_at || a.status === 'active') ? 'active' : a.status === 'cancelled' ? 'cancelled' : a.status;
+    counts[key] = (counts[key] || 0) + 1;
+  }
+  const FILTERS = [['all','All'],['draft','Drafts'],['scheduled','Scheduled'],['active','Sent'],['cancelled','Cancelled']];
+  document.getElementById('activity-filters').innerHTML = FILTERS.map(([key,label]) => {
+    const n = key === 'all' ? activitiesCache.length : (counts[key] || 0);
+    return `<button class="chip ${activityFilter===key?'active':''}" onclick="setActivityFilter('${key}')">${label}${key!=='all' ? ' · ' + n : ''}</button>`;
+  }).join('');
+}
+function setActivityFilter(f) { activityFilter = f; renderActivityFilters(); renderActivityList(); }
+
+function renderActivityList() {
+  let rows = activitiesCache;
+  if (activityFilter !== 'all') {
+    rows = rows.filter(a => {
+      const key = (a.sent_at || a.status === 'active') ? 'active' : a.status === 'cancelled' ? 'cancelled' : a.status;
+      return key === activityFilter;
+    });
+  }
+  document.getElementById('activity-count').textContent = '(' + rows.length + ')';
+  const el = document.getElementById('activity-list');
+  if (rows.length === 0) {
+    el.innerHTML = `<div class="empty"><div class="big">No activities here</div>Plan something for the crowd — in-house guests get it on WhatsApp.</div>`;
+    return;
+  }
+  el.innerHTML = rows.map(a => {
+    const sent = a.sent_at || a.status === 'active';
+    const audience = a.sent_count > 0 ? `sent to ${a.sent_count} guest${a.sent_count===1?'':'s'}` : 'not sent yet';
+    return `
+    <div class="arow">
+      <div class="aicon">🎸</div>
+      <div class="pmain">
+        <div class="pname">${esc(a.event_name)}</div>
+        <div class="pmeta">${esc(a.time)} &middot; ${fmtDate(a.date)}${a.description ? ' &middot; ' + esc(a.description) : ''}</div>
+        <div class="pmeta" style="color:var(--faint)">${esc(audience)}</div>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px">
+        ${activityStatusBadge(a)}
+        <div class="menu-wrap">
+          <button class="btn ghost small" onclick="toggleMenu(event, ${a.id})" title="Actions">⋯</button>
+          <div class="menu" id="menu-${a.id}" style="display:none">
+            ${(!a.sent_at && a.status !== 'cancelled') ? `<button onclick="editActivity(${a.id})">✏️ Edit</button>` : ''}
+            ${(!a.sent_at && a.status !== 'active') ? `<button onclick="sendActivityNow(${a.id})">📤 Send now</button>` : ''}
+            ${(!a.sent_at && a.status !== 'cancelled') ? `<button onclick="duplicateActivity(${a.id})">📄 Duplicate</button>` : ''}
+            ${(!a.sent_at && a.status !== 'cancelled') ? `<button onclick="cancelActivity(${a.id})">🚫 Cancel</button>` : ''}
+            ${!a.sent_at ? `<div class="sep"></div><button class="danger" onclick="deleteActivity(${a.id})">🗑 Delete</button>` : ''}
+          </div>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function toggleMenu(event, id) {
+  event.stopPropagation();
+  document.querySelectorAll('.menu').forEach(m => { if (m.id !== 'menu-' + id) m.style.display = 'none'; });
+  const menu = document.getElementById('menu-' + id);
+  menu.style.display = menu.style.display === 'block' ? 'none' : 'block';
+}
+document.addEventListener('click', (e) => {
+  if (!e.target.closest('.menu-wrap')) document.querySelectorAll('.menu').forEach(m => m.style.display = 'none');
+});
 
 function renderActivityPreview() {
   const date = document.getElementById('act-date').value;
@@ -770,8 +1243,7 @@ function renderActivityPreview() {
   const el = document.getElementById('act-preview');
   if (!date || !time || !name) { el.textContent = 'Fill in the activity to preview the message…'; return; }
   const day = new Date(date + 'T12:00:00Z').toLocaleDateString('en-IN', { weekday:'long', day:'numeric', month:'short' });
-  const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(new Date());
-  const lead = date === today ? "Today's plan" : 'Coming up';
+  const lead = date === istToday() ? "Today's plan" : 'Coming up';
   el.textContent =
     `👀 ${lead} at Zostel Mumbai!\n\n` +
     `${name.toUpperCase()}\n` +
@@ -781,21 +1253,74 @@ function renderActivityPreview() {
     `\n\nCome meet the hostel gang — see you there ✌️`;
 }
 
-async function postActivity() {
+async function postActivity(broadcastNow = true) {
   const body = {
     date: document.getElementById('act-date').value,
     time: document.getElementById('act-time').value,
     eventName: document.getElementById('act-name').value,
     description: document.getElementById('act-desc').value || null,
+    broadcast: !!broadcastNow,
+  };
+  const btn = document.getElementById('act-send-btn');
+  btnLoading('act-send-btn', true);
+  try {
+    const r = await api('/activities', { method: 'POST', body: JSON.stringify(body) });
+    if (broadcastNow) {
+      const sup = r.suppressed.length ? ' Skipped: ' + r.suppressed.map(s => `${s.name} (${s.reason.replace(/_/g,' ')})`).join(', ') : '';
+      celebrate(`"${r.eventName}" sent to ${r.reached} guest${r.reached===1?'':'s'}.${sup}`);
+    } else {
+      toast(`"${r.eventName}" saved as ${r.status}.`);
+    }
+    loadActivities();
+  } catch (e) { toast(e.message, true); }
+  btnLoading('act-send-btn', false);
+}
+
+async function scheduleActivity() {
+  const body = {
+    date: document.getElementById('act-date').value,
+    time: document.getElementById('act-time').value,
+    eventName: document.getElementById('act-name').value,
+    description: document.getElementById('act-desc').value || null,
+    broadcast: false,
   };
   try {
     const r = await api('/activities', { method: 'POST', body: JSON.stringify(body) });
-    const sup = r.suppressed.length
-      ? ' Skipped: ' + r.suppressed.map(s => `${s.name} (${s.reason.replace(/_/g,' ')})`).join(', ')
-      : '';
-    toast(`"${r.eventName}" sent to ${r.reached} guest${r.reached===1?'':'s'}.${sup}`);
+    toast(`"${r.eventName}" saved as ${r.status}. Send it from the activity list when ready.`);
     loadActivities();
   } catch (e) { toast(e.message, true); }
+}
+
+async function sendActivityNow(id) {
+  const ok = await confirmDialog({ title: 'Send this activity now?', message: 'It will be offered to every in-house guest, subject to policy.', confirmText: 'Send now' });
+  if (!ok) return;
+  try {
+    const r = await api('/activities/' + id + '/send', { method: 'POST' });
+    celebrate(`Activity sent to ${r.reached} guest${r.reached===1?'':'s'}`);
+  } catch (e) { toast(e.message, true); }
+  loadActivities();
+}
+
+async function deleteActivity(id) {
+  const ok = await confirmDialog({ title: 'Delete activity?', message: 'This removes the activity. Sent activities cannot be deleted.', confirmText: 'Delete', danger: true });
+  if (!ok) return;
+  try {
+    await api('/activities/' + id, { method: 'DELETE' });
+    toast('Activity deleted.');
+    loadActivities();
+  } catch (e) { toast(e.message, true); }
+}
+
+async function duplicateActivity(id) {
+  const a = activitiesCache.find(x => x.id === id);
+  if (!a) return;
+  document.getElementById('act-date').value = a.date;
+  document.getElementById('act-time').value = a.time;
+  document.getElementById('act-name').value = a.event_name;
+  document.getElementById('act-desc').value = a.description || '';
+  renderActivityPreview();
+  toast('Activity copied into the composer — edit and send.');
+  window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
 boot();

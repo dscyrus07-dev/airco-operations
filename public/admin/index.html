@@ -915,11 +915,13 @@ async function retryMessage(id) {
 }
 
 async function togglePause(id, currently) {
+  const g = guestsCache.find(x => x.id === id);
+  if (g) { g.ai_paused = !currently; renderGuestList(); } // optimistic
   try {
     await api('/guests/' + id, { method: 'PATCH', body: JSON.stringify({ ai_paused: !currently }) });
-    toast(currently ? 'AI resumed — automatic messages will send again.' : 'AI paused — no automatic messages until resumed.');
+    toast(currently ? 'AI resumed ✓' : 'AI paused — no automatic messages until resumed.');
     refreshDetailQuiet(); loadGuests();
-  } catch (e) { toast(e.message, true); }
+  } catch (e) { toast(e.message, true); loadGuests(); }
 }
 async function toggleActivities(id, optedOut) {
   try {

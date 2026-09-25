@@ -133,7 +133,7 @@ async function messageStats() {
 }
 
 export async function getUsage({ force = false } = {}) {
-  if (!force && cache.data && Date.now() - cache.at < CACHE_TTL) {
+  if (!force && cache.data && Date.now() - cache.at < CACHE_TTL_MS) {
     return { ...cache.data, cached: true };
   }
   const [balanceRes, stats, reconciled] = await Promise.all([

@@ -80,23 +80,38 @@ export async function sendTemplate(to, name, _language, components = []) {
   }
   const vars = (components?.[0]?.parameters ?? []).map((p) => String(p?.text ?? ''));
 
+  const freeformFallback = () => {
+    if (process.env.TWILIO_ALLOW_FREEFORM_FALLBACK !== 'true') return false;
+    console.warn(`[twilio] template ${name} unavailable — falling back to rendered free text`);
+    return true;
+  };
+
   if (!contentSid) {
-    if (process.env.NODE_ENV === 'production' && process.env.TWILIO_ALLOW_FREEFORM_FALLBACK !== 'true') {
+    if (!freeformFallback()) {
       throw new Error(`Twilio: no approved ContentSid for template ${name}; refusing free-text fallback`);
     }
-    console.warn(`[twilio] no ContentSid for template ${name} — sending rendered body as free text`);
     const { renderTemplateBody } = await import('../templates/definitions.js');
     return sendText(to, renderTemplateBody(name, vars));
   }
 
-  const body = await postTwilioMessages({
-    From: twilioConfig().from,
-    To: `whatsapp:+${to}`,
-    ContentSid: contentSid,
-    ContentVariables: JSON.stringify(Object.fromEntries(vars.map((v, i) => [String(i + 1), v]))),
-    ...(process.env.TWILIO_STATUS_CALLBACK
-      ? { StatusCallback: process.env.TWILIO_STATUS_CALLBACK }
-      : {}),
-  });
-  return { waMessageId: body.sid };
+  try {
+    const body = await postTwilioMessages({
+      From: twilioConfig().from,
+      To: `whatsapp:+${to}`,
+      ContentSid: contentSid,
+      ContentVariables: JSON.stringify(Object.fromEntries(vars.map((v, i) => [String(i + 1), v]))),
+      ...(process.env.TWILIO_STATUS_CALLBACK
+        ? { StatusCallback: process.env.TWILIO_STATUS_CALLBACK }
+        : {}),
+    });
+    return { waMessageId: body.sid };
+  } catch (err) {
+    // 63016 = template not approved / outside window — fall back to the
+    // rendered Zostel copy as free text while approvals are in flight.
+    if (err?.twilioBody?.code === 63016 && freeformFallback()) {
+      const { renderTemplateBody } = await import('../templates/definitions.js');
+      return sendText(to, renderTemplateBody(name, vars));
+    }
+    throw err;
+  }
 }

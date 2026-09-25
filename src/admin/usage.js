@@ -142,6 +142,21 @@ export async function getUsage({ force = false } = {}) {
   ]);
   const cfg = getConfig();
   const thresholds = { low: usageLowThreshold(), critical: usageCriticalThreshold() };
+  const cost = estCostPerMsg();
+
+  // Projections from the last-7-day average — real data, no invented numbers.
+  const days = Object.values(stats.daily ?? {});
+  const avgDailySends = days.length
+    ? Math.round((days.reduce((s, d) => s + d.sent, 0) / days.length) * 10) / 10
+    : 0;
+  const dailyCostUsd = Math.round(avgDailySends * cost * 10000) / 10000;
+  const nowIst = new Date(Date.now() + 5.5 * 3600 * 1000);
+  const daysInMonth = new Date(nowIst.getUTCFullYear(), nowIst.getUTCMonth() + 1, 0).getUTCDate();
+  const dayOfMonth = nowIst.getUTCDate();
+  const projectedMonthCostUsd = Math.round(dailyCostUsd * daysInMonth * 100) / 100;
+  const runwayDays = dailyCostUsd > 0
+    ? Math.floor(balanceRes.amount / dailyCostUsd)
+    : null;
 
   const data = {
     balance: balanceRes.error
@@ -157,13 +172,25 @@ export async function getUsage({ force = false } = {}) {
     messages: stats,
     sender: { number: cfg.twilioWhatsappFrom, connected: !balanceRes.error },
     capacity:
-      !balanceRes.error && estCostPerMsg()
+      !balanceRes.error && cost
         ? {
-            messages: Math.floor(balanceRes.amount / estCostPerMsg()),
-            perMessageCost: estCostPerMsg(),
+            messages: Math.floor(balanceRes.amount / cost),
+            perMessageCost: cost,
             currency: balanceRes.currency,
           }
         : { unavailable: true },
+    projections: {
+      avgDailySends,
+      dailyCostUsd,
+      projectedMonthCostUsd,
+      runwayDays,
+      dayOfMonth,
+      daysInMonth,
+    },
+    limits: {
+      proactiveDailyCap: cfg.proactiveDailyCap,
+      tier: 'Auto-scaling — 250 → 1K → 10K → 100K → unlimited',
+    },
     thresholds,
     syncedAt: new Date().toISOString(),
   };

@@ -124,6 +124,10 @@
   .usage-head { display:flex; align-items:center; gap:12px; flex-wrap:wrap; margin-bottom:14px; }
   .cols2 { display:grid; grid-template-columns:1fr 1fr; gap:16px; align-items:start; }
   .usage-card-sub { font-size:11.5px; color:var(--faint); margin-top:4px; }
+  .limit-box { background:#f9fafb; border:1px solid var(--line); border-radius:10px; padding:12px 14px; }
+  .limit-box .lt { font-size:10.5px; font-weight:700; color:var(--dim); text-transform:uppercase; letter-spacing:.4px; }
+  .limit-box .lv { font-size:14px; font-weight:700; margin-top:4px; line-height:1.35; }
+  .limit-box .ls { font-size:11px; color:var(--faint); margin-top:4px; line-height:1.4; }
   .cols3 { display:grid; grid-template-columns:repeat(3,1fr); gap:16px; align-items:start; }
 
   /* ---- buttons & forms ---- */
@@ -457,6 +461,10 @@
           <div style="padding:16px" id="usage-connection"></div>
         </div>
       </div>
+    </div>
+    <div class="card" style="margin-top:16px">
+      <h2>Limits & projections</h2>
+      <div style="padding:16px" id="usage-limits"></div>
     </div>
     <div class="card" style="margin-top:16px">
       <h2>Recent WhatsApp messages <span class="count" id="usage-recent-count"></span></h2>
@@ -1255,6 +1263,24 @@ function renderUsage(u) {
 
   renderUsageChart(m.daily);
   renderUsageRecent(m.recent ?? []);
+
+  // limits & projections
+  const p = u.projections ?? {};
+  const lim = u.limits ?? {};
+  const runway = (p.runwayDays === null || p.runwayDays === undefined)
+    ? '—'
+    : p.runwayDays >= 30 ? p.runwayDays + ' days ✓'
+    : p.runwayDays >= 7 ? p.runwayDays + ' days'
+    : p.runwayDays + ' days ⚠️';
+  document.getElementById('usage-limits').innerHTML = `
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px">
+      <div class="limit-box"><div class="lt">Meta messaging tier</div><div class="lv">${esc(lim.tier ?? '—')}</div><div class="ls">Grows automatically with quality — never your bottleneck at this scale</div></div>
+      <div class="limit-box"><div class="lt">Daily proactive cap</div><div class="lv">${lim.proactiveDailyCap ?? '—'} / guest / day</div><div class="ls">Configurable via PROACTIVE_DAILY_CAP — your deliberate safety brake</div></div>
+      <div class="limit-box"><div class="lt">Avg daily sends (7d)</div><div class="lv">${p.avgDailySends ?? '—'}</div><div class="ls">≈ $${p.dailyCostUsd ?? '—'}/day at $${(u.capacity.perMessageCost ?? 0).toFixed(4)}/message</div></div>
+      <div class="limit-box"><div class="lt">Projected month cost</div><div class="lv">$${p.projectedMonthCostUsd ?? '—'}</div><div class="ls">Day ${p.dayOfMonth ?? '—'} of ${p.daysInMonth ?? '—'} · estimate only</div></div>
+      <div class="limit-box"><div class="lt">Balance runway</div><div class="lv" style="color:${(p.runwayDays ?? 99) >= 30 ? 'var(--green)' : (p.runwayDays ?? 99) >= 7 ? 'var(--text)' : 'var(--red)'}">${runway}</div><div class="ls">At current pace — top up before it runs out</div></div>
+      <div class="limit-box"><div class="lt">Low balance alerts</div><div class="lv">$${u.thresholds?.low ?? '—'} / $${u.thresholds?.critical ?? '—'}</div><div class="ls">Warning / critical thresholds (configurable via env)</div></div>
+    </div>`;
 }
 
 function renderUsageChart(daily) {

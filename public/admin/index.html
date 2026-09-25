@@ -347,6 +347,7 @@
     <button id="tab-guests" onclick="switchView('guests')">Guests</button>
     <button id="tab-activities" onclick="switchView('activities')">Activities</button>
     <button id="tab-usage" onclick="switchView('usage')">Usage</button>
+    <button id="tab-templates" onclick="switchView('templates')">Templates</button>
   </nav>
   <div class="right">
     <div class="conn" id="conn-status">connected</div>
@@ -470,6 +471,20 @@
       <h2>Recent WhatsApp messages <span class="count" id="usage-recent-count"></span></h2>
       <div class="list" id="usage-recent"></div>
     </div>
+  </section>
+
+  <!-- ================= TEMPLATES ================= -->
+  <section class="view" id="view-templates">
+    <div class="usage-head">
+      <div>
+        <div style="font-size:16px;font-weight:700">Journey templates</div>
+        <div style="font-size:12.5px;color:var(--dim)">The 5 WhatsApp messages every guest receives · edits re-submit for Meta approval</div>
+      </div>
+      <div style="margin-left:auto">
+        <button class="btn secondary small" onclick="loadTemplates()">↻ Refresh</button>
+      </div>
+    </div>
+    <div id="templates-list"></div>
   </section>
 </main>
 
@@ -603,11 +618,12 @@ function refreshAll() {
   else if (currentView === 'guests') { loadGuests(); if (selectedId) refreshDetailQuiet(); }
   else if (currentView === 'activities') loadActivities();
   else if (currentView === 'usage') loadUsage();
+  else if (currentView === 'templates') loadTemplates();
 }
 
 function switchView(v) {
   currentView = v;
-  for (const x of ['today','guests','activities','usage']) {
+  for (const x of ['today','guests','activities','usage','templates']) {
     document.getElementById('view-' + x).classList.toggle('active', x === v);
     document.getElementById('tab-' + x).classList.toggle('active', x === v);
   }
@@ -1328,6 +1344,105 @@ async function loadUsage(force) {
     renderUsage(usageCache);
   } catch (e) { toast(e.message, true); }
   if (btn) { btn.disabled = false; btn.textContent = '↻ Refresh'; }
+}
+
+/* ---------- TEMPLATES ---------- */
+let templatesCache = null;
+let reviewUrlCache = '';
+
+async function loadTemplates() {
+  const el = document.getElementById('templates-list');
+  if (el && !el.dataset.loaded) el.innerHTML = Array.from({ length: 5 }, () =>
+    '<div class="card" style="margin-bottom:14px"><div style="padding:16px"><div class="skel" style="height:14px;width:30%"></div><div class="skel" style="height:60px;margin-top:10px"></div></div></div>').join('');
+  try {
+    const d = await api('/templates');
+    templatesCache = d.templates;
+    reviewUrlCache = d.reviewUrl ?? '';
+    renderTemplates();
+  } catch (e) { toast(e.message, true); }
+}
+
+function approvalBadge(s) {
+  if (s === 'approved') return '<span class="badge b-active"><span class="bdot"></span>Approved ✓</span>';
+  if (s === 'pending' || s === 'received') return '<span class="badge b-scheduled"><span class="bdot"></span>In review</span>';
+  if (s === 'rejected') return '<span class="badge b-cancelled">Rejected</span>';
+  return `<span class="badge b-draft">${esc(s)}</span>`;
+}
+
+function renderTemplates() {
+  const el = document.getElementById('templates-list');
+  if (!el) return;
+  el.innerHTML = templatesCache.map((t, i) => `
+    <div class="card" style="margin-bottom:14px">
+      <div style="padding:14px 18px">
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+          <div style="font-size:14px;font-weight:700">${esc(t.name.replace(/_/g, ' '))}</div>
+          ${approvalBadge(t.approval)}
+          <span style="font-size:11.5px;color:var(--faint)">${t.variables} variable${t.variables === 1 ? '' : 's'} · {{1}} = guest name</span>
+          <button class="btn secondary small" style="margin-left:auto" onclick="openEditTemplate('${t.name}')">✏️ Edit</button>
+        </div>
+        <div class="preview-box" style="margin-top:10px;max-width:none;white-space:pre-wrap;font-size:12.5px">${esc(t.body)}</div>
+      </div>
+    </div>`).join('') + `
+    <div class="card" style="margin-bottom:14px">
+      <div style="padding:14px 18px">
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+          <div style="font-size:14px;font-weight:700">Review link</div>
+          <span style="font-size:11.5px;color:var(--faint)">used in the review request message ({{2}})</span>
+        </div>
+        <div style="display:flex;gap:8px;margin-top:10px;max-width:520px">
+          <input class="in" id="review-url-input" value="${esc(reviewUrlCache)}" placeholder="https://g.page/r/your-zostel/review">
+          <button class="btn" onclick="saveReviewUrl()">Save</button>
+        </div>
+      </div>
+    </div>`;
+}
+
+function openEditTemplate(name) {
+  const t = (templatesCache ?? []).find((x) => x.name === name);
+  if (!t) return;
+  const isReview = name === 'review_request';
+  const overlay = document.createElement('div');
+  overlay.className = 'overlay';
+  overlay.innerHTML = `
+    <div class="modal" style="width:min(560px,100%)">
+      <div class="mh">Edit ${esc(name.replace(/_/g, ' '))}</div>
+      <div class="msub">Variables: {{1}} = guest name${t.variables > 1 ? `, {{2}}..{{${t.variables}}} = extra values` : ''}. Keep the tone transactional — Meta rejects marketing-style utility templates.</div>
+      <div class="mb">
+        <label class="fl">Message body</label>
+        <textarea class="in" id="tpl-body" rows="10" style="font-size:13px;line-height:1.5">${esc(t.body)}</textarea>
+        ${isReview ? `<div style="margin-top:12px"><label class="fl">Review link ({{2}})</label><input class="in" id="tpl-review-url" value="${esc(reviewUrlCache)}" placeholder="https://g.page/r/your-zostel/review"></div>` : ''}
+      </div>
+      <div class="mf">
+        <button class="btn ghost" onclick="closeModal()">Cancel</button>
+        <button class="btn" id="tpl-save-btn" onclick="saveTemplate('${name}')">Save & re-submit</button>
+      </div>
+    </div>`;
+  document.getElementById('modal-root').appendChild(overlay);
+}
+
+async function saveTemplate(name) {
+  const body = document.getElementById('tpl-body').value.trim();
+  const reviewUrl = document.getElementById('tpl-review-url')?.value?.trim();
+  if (!body) { toast('Template body is required.', true); return; }
+  btnLoading('tpl-save-btn', true);
+  try {
+    const r = await api('/templates/' + name, { method: 'PUT', body: JSON.stringify({ body, reviewUrl }) });
+    closeModal();
+    toast('Template saved — re-submitted for WhatsApp approval ✓');
+    loadTemplates();
+  } catch (e) { toast(e.message, true); }
+  btnLoading('tpl-save-btn', false);
+}
+
+async function saveReviewUrl() {
+  const url = document.getElementById('review-url-input').value.trim();
+  try {
+    const t = (templatesCache ?? []).find((x) => x.name === 'review_request');
+    await api('/templates/review_request', { method: 'PUT', body: JSON.stringify({ body: t.body, reviewUrl: url }) });
+    reviewUrlCache = url;
+    toast('Review link saved ✓');
+  } catch (e) { toast(e.message, true); }
 }
 
 /* ---------- ACTIVITIES ---------- */

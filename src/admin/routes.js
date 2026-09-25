@@ -17,6 +17,14 @@ import {
   getActivity,
 } from '../agent/activities.js';
 import { getUsage } from './usage.js';
+import {
+  getAllTemplateConfigs,
+  setTemplateBody,
+  setTemplateContentSid,
+  getReviewUrl,
+  setReviewUrl,
+  TEMPLATE_NAMES,
+} from '../templates/store.js';
 import { queueMessage, dispatchPending } from '../messaging/outbound.js';
 
 function safeEqual(a, b) {
@@ -367,6 +375,119 @@ export function adminRouter() {
       res.json(await getUsage({ force }));
     } catch (err) {
       res.status(502).json({ error: 'Twilio usage temporarily unavailable', detail: err.message });
+    }
+  });
+
+  // ---- Journey template management (dashboard-editable) ----
+
+  router.get('/api/templates', async (_req, res, next) => {
+    try {
+      const configs = await getAllTemplateConfigs();
+      const reviewUrl = await getReviewUrl();
+      // approval status per template from Twilio (best-effort)
+      const withStatus = await Promise.all(configs.map(async (t) => {
+        let approval = 'unknown';
+        if (t.contentSid) {
+          try {
+            const auth = 'Basic ' + Buffer.from(
+              `${getConfig().twilioAccountSid}:${getConfig().twilioAuthToken}`
+            ).toString('base64');
+            const r = await fetch(
+              `https://content.twilio.com/v1/Content/${t.contentSid}/ApprovalRequests`,
+              { headers: { Authorization: auth }, signal: AbortSignal.timeout(8000) }
+            );
+            const j = await r.json().catch(() => ({}));
+            approval = j.whatsapp?.status ?? 'not submitted';
+          } catch { approval = 'unreachable'; }
+        } else approval = 'no content';
+        return { ...t, approval };
+      }));
+      res.json({ templates: withStatus, reviewUrl });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  // Edit a template: saves copy to DB, creates a new Twilio Content resource
+  // with the same example values, re-submits for approval, and switches the
+  // active ContentSid. The previously approved version keeps delivering until
+  // the new one clears review.
+  router.put('/api/templates/:name', async (req, res) => {
+    try {
+      const name = String(req.params.name);
+      if (!TEMPLATE_NAMES.includes(name)) return res.status(400).json({ error: 'unknown template' });
+      const body = String(req.body?.body ?? '').trim();
+      if (!body) return res.status(400).json({ error: 'template body is required' });
+      if (body.length > 1024) return res.status(400).json({ error: 'template body too long (max 1024 chars)' });
+
+      if (req.body?.reviewUrl !== undefined && name === 'review_request') {
+        await setReviewUrl(String(req.body.reviewUrl ?? '').trim());
+      }
+      await setTemplateBody(name, body);
+
+      // Build the new Twilio Content with the same example values as before.
+      const auth = 'Basic ' + Buffer.from(
+        `${getConfig().twilioAccountSid}:${getConfig().twilioAuthToken}`
+      ).toString('base64');
+      const configs = await getAllTemplateConfigs();
+      const current = configs.find((t) => t.name === name);
+      let examples = { 1: 'Cyrus' };
+      if (current?.contentSid) {
+        const r = await fetch(`https://content.twilio.com/v1/Content/${current.contentSid}`, {
+          headers: { Authorization: auth }, signal: AbortSignal.timeout(8000),
+        });
+        const j = await r.json().catch(() => ({}));
+        if (j.variables && Object.keys(j.variables).length) examples = j.variables;
+      }
+      const varCount = (body.match(/\{\{\d+\}\}/g) ?? []).length;
+      const trimmedExamples = Object.fromEntries(
+        Object.entries(examples).slice(0, Math.max(1, varCount))
+      );
+
+      const createRes = await fetch('https://content.twilio.com/v1/Content', {
+        method: 'POST',
+        headers: { Authorization: auth, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          friendly_name: `airco_${name}_${Date.now().toString(36)}`,
+          language: 'en',
+          variables: trimmedExamples,
+          types: { 'twilio/text': { body } },
+        }),
+        signal: AbortSignal.timeout(10000),
+      });
+      const created = await createRes.json().catch(() => ({}));
+      if (!createRes.ok) {
+        return res.status(502).json({ error: 'Twilio content creation failed', detail: created.message ?? '' });
+      }
+
+      const subRes = await fetch(
+        `https://content.twilio.com/v1/Content/${created.sid}/ApprovalRequests/whatsapp`,
+        {
+          method: 'POST',
+          headers: { Authorization: auth, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name, category: 'UTILITY' }),
+          signal: AbortSignal.timeout(10000),
+        }
+      );
+      const sub = await subRes.json().catch(() => ({}));
+
+      const oldSid = current?.contentSid;
+      await setTemplateContentSid(name, created.sid);
+      if (oldSid && oldSid !== created.sid) {
+        fetch(`https://content.twilio.com/v1/Content/${oldSid}`, {
+          method: 'DELETE', headers: { Authorization: auth }, signal: AbortSignal.timeout(8000),
+        }).catch(() => {});
+      }
+
+      res.json({
+        ok: true,
+        name,
+        contentSid: created.sid,
+        approval: sub.whatsapp?.status ?? sub.body?.whatsapp?.status ?? 'received',
+        note: 'Saved. Re-submitted for WhatsApp approval — the previous approved version keeps delivering until this one clears.',
+      });
+    } catch (err) {
+      res.status(400).json({ error: err.message });
     }
   });
 

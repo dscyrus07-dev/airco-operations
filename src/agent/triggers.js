@@ -88,7 +88,8 @@ export async function applyEventToGuest(guest, eventName, detail, asOf = new Dat
 
 async function maybeQueueProactive(guest, templateName, kind, triggerEvent, asOf) {
   const cfg = getConfig();
-  const vars = templateVariables(templateName, guest);
+  const { buildTemplateVars } = await import('../templates/store.js');
+  const vars = await buildTemplateVars(templateName, guest);
   const [proactiveSentToday, openRequestCount, sessionOpen] = await Promise.all([
     countProactiveToday(guest.id, asOf),
     countOpenRequests(guest.id),

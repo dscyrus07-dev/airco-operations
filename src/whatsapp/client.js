@@ -69,15 +69,11 @@ export async function sendText(to, text) {
 // TWILIO_CONTENT_SIDS (JSON). Without a mapping the rendered body is sent as
 // free text (allowed inside an open 24h session with a registered sender).
 export async function sendTemplate(to, name, _language, components = []) {
-  let contentSid = null;
-  const raw = process.env.TWILIO_CONTENT_SIDS;
-  if (raw) {
-    try {
-      contentSid = JSON.parse(raw)[name] ?? null;
-    } catch {
-      console.warn('[twilio] TWILIO_CONTENT_SIDS set but not valid JSON — ignoring');
-    }
-  }
+  // Template config (ContentSid + fallback copy) lives in the database —
+  // editable from the dashboard without code deploys.
+  const { getTemplateConfig } = await import('../templates/store.js');
+  const cfgRow = (await getTemplateConfig(name)) ?? {};
+  const contentSid = cfgRow.contentSid ?? null;
   const vars = (components?.[0]?.parameters ?? []).map((p) => String(p?.text ?? ''));
 
   const freeformFallback = () => {
@@ -86,12 +82,16 @@ export async function sendTemplate(to, name, _language, components = []) {
     return true;
   };
 
+  const sendFreeform = async () => {
+    const { renderTemplateBody } = await import('../templates/definitions.js');
+    return sendText(to, renderTemplateBody(name, vars));
+  };
+
   if (!contentSid) {
     if (!freeformFallback()) {
       throw new Error(`Twilio: no approved ContentSid for template ${name}; refusing free-text fallback`);
     }
-    const { renderTemplateBody } = await import('../templates/definitions.js');
-    return sendText(to, renderTemplateBody(name, vars));
+    return sendFreeform();
   }
 
   try {
@@ -109,8 +109,7 @@ export async function sendTemplate(to, name, _language, components = []) {
     // 63016 = template not approved / outside window — fall back to the
     // rendered Zostel copy as free text while approvals are in flight.
     if (err?.twilioBody?.code === 63016 && freeformFallback()) {
-      const { renderTemplateBody } = await import('../templates/definitions.js');
-      return sendText(to, renderTemplateBody(name, vars));
+      return sendFreeform();
     }
     throw err;
   }

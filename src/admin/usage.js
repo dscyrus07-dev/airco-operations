@@ -155,9 +155,9 @@ export async function getUsage({ force = false } = {}) {
             : 'healthy',
         },
     messages: stats,
-    sender: { number: cfg.twilioWhatsappFrom, connected: balanceRes.ok },
+    sender: { number: cfg.twilioWhatsappFrom, connected: !balanceRes.error },
     capacity:
-      balanceRes.ok && estCostPerMsg()
+      !balanceRes.error && estCostPerMsg()
         ? {
             messages: Math.floor(balanceRes.amount / estCostPerMsg()),
             perMessageCost: estCostPerMsg(),

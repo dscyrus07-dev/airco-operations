@@ -419,6 +419,10 @@ export function adminRouter() {
       const body = String(req.body?.body ?? '').trim();
       if (!body) return res.status(400).json({ error: 'template body is required' });
       if (body.length > 1024) return res.status(400).json({ error: 'template body too long (max 1024 chars)' });
+      // Meta rule: variables can't be at the very start or end of the body
+      if (/^{{/.test(body) || /{{d+}}s*$/.test(body)) {
+        return res.status(400).json({ error: 'Meta rejects variables at the start or end — add a short line of text after the last {{n}}.' });
+      }
 
       if (req.body?.reviewUrl !== undefined && name === 'review_request') {
         await setReviewUrl(String(req.body.reviewUrl ?? '').trim());
@@ -465,7 +469,9 @@ export function adminRouter() {
         {
           method: 'POST',
           headers: { Authorization: auth, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ name, category: 'UTILITY' }),
+          // Versioned name: Meta rejects duplicate template names, and the
+          // previously approved version still holds the base name.
+          body: JSON.stringify({ name: `${name}_v${Date.now().toString(36)}`, category: 'UTILITY' }),
           signal: AbortSignal.timeout(10000),
         }
       );

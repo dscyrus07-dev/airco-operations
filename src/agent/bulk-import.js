@@ -22,7 +22,7 @@ async function upsertGuest(parsed) {
   const rows = await query(
     `INSERT INTO guests (phone, name, property, room, check_in, check_out, journey_state, whatsapp_opt_in)
      VALUES ($1, $2, 'Zostel Mumbai', $3, $4, $5, 'booked', TRUE) RETURNING id`,
-    [phone, parsed.guest_name, parsed.room_number, parsed.arrival, parsed.departure]
+    [parsed.contact_number, parsed.guest_name, parsed.room_number, parsed.arrival, parsed.departure]
   );
   return rows[0].id;
 }

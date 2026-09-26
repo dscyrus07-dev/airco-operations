@@ -17,6 +17,7 @@ import {
   getActivity,
 } from '../agent/activities.js';
 import { getUsage } from './usage.js';
+import { importBulkReport, sendManualTemplate } from '../agent/bulk-import.js';
 import {
   getAllTemplateConfigs,
   setTemplateBody,

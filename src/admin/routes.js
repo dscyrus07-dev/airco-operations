@@ -56,7 +56,7 @@ export function adminRouter() {
   router.get('/api/guests', async (_req, res, next) => {
     try {
       const rows = await query(
-        `SELECT g.id, g.phone, g.name, g.room,
+        `SELECT g.id::int AS id, g.phone, g.name, g.room,
                 to_char(g.check_in, 'YYYY-MM-DD') AS check_in,
                 to_char(g.check_out, 'YYYY-MM-DD') AS check_out,
                 g.journey_state, g.ai_paused, g.whatsapp_opt_in, g.created_at,
@@ -140,7 +140,7 @@ export function adminRouter() {
       const id = Number(req.params.id);
       if (!Number.isInteger(id)) return res.status(400).json({ error: 'bad id' });
       const b = req.body ?? {};
-      const existing = await query('SELECT * FROM guests WHERE id = $1', [id]);
+      const existing = await query('SELECT id::int AS id, phone, name, property, room, check_in, check_out, journey_state, ai_paused, whatsapp_opt_in, activities_opt_out FROM guests WHERE id = $1', [id]);
       if (existing.length === 0) return res.status(404).json({ error: 'guest not found' });
 
       const updates = {};

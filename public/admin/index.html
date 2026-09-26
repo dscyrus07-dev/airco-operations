@@ -792,7 +792,7 @@ function renderGuestList() {
   }
   el.innerHTML = rows.map(g => `
     <div class="prow clickable ${g.id===selectedId?'selected':''}" onclick="selectGuest(${g.id})">
-      <input type="checkbox" ${selectedGuestIds.has(g.id)?'checked':''} onclick="event.stopPropagation();toggleGuestSelect(${g.id})" style="width:auto;flex:none;margin-right:2px">
+      <input type="checkbox" ${selectedGuestIds.has(Number(g.id))?'checked':''} onclick="event.stopPropagation();toggleGuestSelect(${g.id})" style="width:auto;flex:none;margin-right:2px">
       ${avatar(g.name)}
       <div class="pmain">
         <div class="pname">${esc(g.name)}
@@ -1566,7 +1566,10 @@ async function saveReviewUrl() {
 }
 
 /* ---------- BULK SELECTION ---------- */
+// Guest ids arrive as strings (BIGINT via pg) but the inline onclick passes a
+// number literal — normalise to Number everywhere or Set.has() never matches.
 function toggleGuestSelect(id) {
+  id = Number(id);
   if (selectedGuestIds.has(id)) selectedGuestIds.delete(id);
   else selectedGuestIds.add(id);
   renderGuestList();
@@ -1574,8 +1577,9 @@ function toggleGuestSelect(id) {
 function clearGuestSelection() { selectedGuestIds.clear(); renderGuestList(); }
 function selectAllEligible(kind) {
   for (const g of guestsCache) {
-    if (kind === 'welcome' && ['checked_in','in_stay','checkout_pending'].includes(g.journey_state) && !g.welcome_sent) selectedGuestIds.add(g.id);
-    else if (kind === 'review' && ['checked_out','review_requested'].includes(g.journey_state) && !g.review_sent) selectedGuestIds.add(g.id);
+    const id = Number(g.id);
+    if (kind === 'welcome' && ['checked_in','in_stay','checkout_pending'].includes(g.journey_state) && !g.welcome_sent) selectedGuestIds.add(id);
+    else if (kind === 'review' && ['checked_out','review_requested'].includes(g.journey_state) && !g.review_sent) selectedGuestIds.add(id);
   }
   renderGuestList();
 }
@@ -1584,7 +1588,7 @@ function renderBulkBar() {
   if (!bar) return;
   const n = selectedGuestIds.size;
   if (n === 0) { bar.style.display = 'none'; return; }
-  const list = guestsCache.filter(g => selectedGuestIds.has(g.id));
+  const list = guestsCache.filter(g => selectedGuestIds.has(Number(g.id)));
   const welcomeEligible = list.filter(g => ['checked_in','in_stay','checkout_pending'].includes(g.journey_state) && !g.welcome_sent).length;
   const reviewEligible = list.filter(g => ['checked_out','review_requested'].includes(g.journey_state) && !g.review_sent).length;
   bar.style.display = 'block';
@@ -1599,7 +1603,7 @@ function renderBulkBar() {
 }
 
 async function bulkDeleteGuests() {
-  const list = guestsCache.filter(g => selectedGuestIds.has(g.id));
+  const list = guestsCache.filter(g => selectedGuestIds.has(Number(g.id)));
   if (!list.length) return;
   const ok = await confirmDialog({
     title: 'Delete ' + list.length + ' guest' + (list.length === 1 ? '' : 's') + '?',
@@ -1616,7 +1620,7 @@ async function bulkDeleteGuests() {
 }
 
 async function bulkSend(kind) {
-  const list = guestsCache.filter(g => selectedGuestIds.has(g.id));
+  const list = guestsCache.filter(g => selectedGuestIds.has(Number(g.id)));
   const eligible = list.filter(g =>
     kind === 'welcome'
       ? ['checked_in','in_stay','checkout_pending'].includes(g.journey_state) && !g.welcome_sent

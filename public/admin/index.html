@@ -390,6 +390,16 @@
           <input class="in" id="search" placeholder="Search name, phone, room…" style="border:none;padding:4px 0;background:transparent" oninput="renderGuestList()">
         </div>
         <div class="chips" id="guest-filters"></div>
+        <div style="display:flex;gap:8px;align-items:center;padding:8px 14px 4px;font-size:12.5px;flex-wrap:wrap">
+          <span title="Filter by date">📅</span>
+          <input type="date" id="guest-date" class="in" style="width:auto;padding:4px 8px;font-size:12.5px" onchange="renderGuestList()">
+          <select id="guest-date-mode" class="in" style="width:auto;padding:4px 8px;font-size:12.5px" onchange="renderGuestList()">
+            <option value="check_in">Check-in date</option>
+            <option value="check_out">Check-out date</option>
+          </select>
+          <button class="btn ghost small" id="date-clear" style="display:none" onclick="clearDateFilter()">Clear date</button>
+        </div>
+        <div id="bulk-selection-bar" style="display:none;padding:10px 14px;border-bottom:1px solid var(--line);background:var(--accent-soft)"></div>
         <div class="list maxh-560" id="guest-list"></div>
       </div>
       <div class="card" id="detail-card">
@@ -755,12 +765,23 @@ function nextCommunication(g) {
 }
 
 function setGuestFilter(f) { guestFilter = f; renderGuestFilters(); renderGuestList(); }
+function clearDateFilter() {
+  const d = document.getElementById('guest-date');
+  if (d) d.value = '';
+  renderGuestList();
+}
 
 function renderGuestList() {
   const q = (document.getElementById('search').value || '').toLowerCase().trim();
   let rows = guestsCache.filter(g =>
     !q || g.name.toLowerCase().includes(q) || g.phone.includes(q) || String(g.room||'').toLowerCase().includes(q));
   if (guestFilter !== 'all') rows = rows.filter(g => g.journey_state === guestFilter);
+  const dateVal = document.getElementById('guest-date')?.value;
+  const dateMode = document.getElementById('guest-date-mode')?.value ?? 'check_in';
+  if (dateVal) rows = rows.filter(g => (dateMode === 'check_in' ? g.check_in : g.check_out) === dateVal);
+  const clearBtn = document.getElementById('date-clear');
+  if (clearBtn) clearBtn.style.display = dateVal ? '' : 'none';
+  renderBulkBar();
   document.getElementById('guest-count').textContent = '(' + rows.length + ')';
   const el = document.getElementById('guest-list');
   if (rows.length === 0) {
@@ -771,6 +792,7 @@ function renderGuestList() {
   }
   el.innerHTML = rows.map(g => `
     <div class="prow clickable ${g.id===selectedId?'selected':''}" onclick="selectGuest(${g.id})">
+      <input type="checkbox" ${selectedGuestIds.has(g.id)?'checked':''} onclick="event.stopPropagation();toggleGuestSelect(${g.id})" style="width:auto;flex:none;margin-right:2px">
       ${avatar(g.name)}
       <div class="pmain">
         <div class="pname">${esc(g.name)}
@@ -1571,8 +1593,26 @@ function renderBulkBar() {
       <b style="font-size:13px">${n} selected</b>
       <button class="btn small" ${welcomeEligible ? '' : 'disabled'} onclick="bulkSend('welcome')">Send Welcome (${welcomeEligible})</button>
       <button class="btn small" ${reviewEligible ? '' : 'disabled'} onclick="bulkSend('review')">Send Review (${reviewEligible})</button>
+      <button class="btn danger small" onclick="bulkDeleteGuests()">Delete (${n})</button>
       <button class="btn ghost small" onclick="clearGuestSelection()">Clear</button>
     </div>`;
+}
+
+async function bulkDeleteGuests() {
+  const list = guestsCache.filter(g => selectedGuestIds.has(g.id));
+  if (!list.length) return;
+  const ok = await confirmDialog({
+    title: 'Delete ' + list.length + ' guest' + (list.length === 1 ? '' : 's') + '?',
+    message: 'They will be archived and stop receiving all WhatsApp messages immediately.',
+    confirmText: 'Delete',
+  });
+  if (!ok) return;
+  try {
+    const r = await api('/guests/bulk-delete', { method: 'POST', body: JSON.stringify({ ids: list.map(g => g.id) }) });
+    celebrate(r.deleted + ' guest' + (r.deleted === 1 ? '' : 's') + ' deleted');
+    selectedGuestIds.clear();
+    loadGuests();
+  } catch (e) { toast(e.message, true); }
 }
 
 async function bulkSend(kind) {

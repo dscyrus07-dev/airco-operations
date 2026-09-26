@@ -164,13 +164,25 @@ async function queueConfirmation(guestId, parsed) {
   });
 }
 
+// Outbound template messages sent to a guest today (IST) — for the daily cap.
+async function proactiveCountToday(guestId) {
+  const rows = await query(
+    `SELECT count(*)::int AS n FROM messages
+     WHERE guest_id = $1 AND direction = 'out' AND message_type = 'template'
+       AND (created_at AT TIME ZONE 'Asia/Kolkata')::date
+           = (now() AT TIME ZONE 'Asia/Kolkata')::date`,
+    [guestId]
+  );
+  return rows[0].n;
+}
+
 // ---- journey scheduler: pre-arrival (+1h) and checkout reminder (1 PM) ----
 
 export async function runJourneyScheduler() {
   // Pre-arrival: due 1 hour after import. Sends the approved checkin_info
   // template (our pre-arrival message). Idempotent via sent_at.
   const duePre = await query(
-    `SELECT b.*, g.name AS g_name, g.journey_state, g.archived, g.whatsapp_opt_in
+    `SELECT b.*, g.name AS g_name, g.journey_state, g.archived, g.whatsapp_opt_in, g.ai_paused
      FROM bookings b JOIN guests g ON g.id = b.guest_id
      WHERE b.classification = 'BOOKING'
        AND b.pre_arrival_due_at IS NOT NULL
@@ -180,6 +192,14 @@ export async function runJourneyScheduler() {
   for (const b of duePre.rows) {
     if (b.archived || b.whatsapp_opt_in === false) {
       await query(`UPDATE bookings SET pre_arrival_sent_at = now(), pre_arrival_status = 'skipped' WHERE id = $1`, [b.id]);
+      continue;
+    }
+    if (b.ai_paused) {
+      await query(`UPDATE bookings SET pre_arrival_sent_at = now(), pre_arrival_status = 'skipped_ai_paused' WHERE id = $1`, [b.id]);
+      continue;
+    }
+    if ((await proactiveCountToday(b.guest_id)) >= getConfig().proactiveDailyCap) {
+      await query(`UPDATE bookings SET pre_arrival_sent_at = now(), pre_arrival_status = 'skipped_daily_cap' WHERE id = $1`, [b.id]);
       continue;
     }
     const already = await query(
@@ -210,7 +230,7 @@ export async function runJourneyScheduler() {
   // Checkout reminder: due 13:00 IST on the departure date. Only guests still
   // in-house are eligible — already-checked-out guests are marked skipped.
   const dueCheckout = await query(
-    `SELECT b.*, g.name AS g_name, g.journey_state, g.archived, g.whatsapp_opt_in
+    `SELECT b.*, g.name AS g_name, g.journey_state, g.archived, g.whatsapp_opt_in, g.ai_paused
      FROM bookings b JOIN guests g ON g.id = b.guest_id
      WHERE b.classification = 'BOOKING'
        AND b.checkout_reminder_due_at IS NOT NULL
@@ -220,6 +240,14 @@ export async function runJourneyScheduler() {
   for (const b of dueCheckout.rows) {
     if (['checked_out', 'review_requested', 'closed'].includes(b.journey_state) || b.archived) {
       await query(`UPDATE bookings SET checkout_reminder_sent_at = now(), checkout_reminder_status = 'skipped_already_checked_out' WHERE id = $1`, [b.id]);
+      continue;
+    }
+    if (b.ai_paused) {
+      await query(`UPDATE bookings SET checkout_reminder_sent_at = now(), checkout_reminder_status = 'skipped_ai_paused' WHERE id = $1`, [b.id]);
+      continue;
+    }
+    if ((await proactiveCountToday(b.guest_id)) >= getConfig().proactiveDailyCap) {
+      await query(`UPDATE bookings SET checkout_reminder_sent_at = now(), checkout_reminder_status = 'skipped_daily_cap' WHERE id = $1`, [b.id]);
       continue;
     }
     const already = await query(
@@ -252,11 +280,13 @@ export async function sendManualTemplate(guestIds, templateName) {
   const skipped = [];
   for (const guestId of guestIds) {
     const guests = await query(
-      'SELECT id, name, journey_state FROM guests WHERE id = $1 AND archived = FALSE',
+      'SELECT id, name, journey_state, whatsapp_opt_in, ai_paused FROM guests WHERE id = $1 AND archived = FALSE',
       [guestId]
     );
     if (!guests.length) { skipped.push({ id: guestId, reason: 'not found' }); continue; }
     const g = guests[0];
+    if (g.whatsapp_opt_in === false) { skipped.push({ id: g.id, name: g.name, reason: 'opted out of WhatsApp' }); continue; }
+    if (g.ai_paused) { skipped.push({ id: g.id, name: g.name, reason: 'AI paused' }); continue; }
     const already = await query(
       `SELECT 1 FROM messages WHERE guest_id = $1 AND template_name = $2
        AND status IN ('queued','sent','delivered','read') LIMIT 1`,

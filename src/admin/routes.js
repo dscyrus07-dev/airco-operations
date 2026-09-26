@@ -557,5 +557,20 @@ export function adminRouter() {
     }
   });
 
+  // Bulk delete (archive): staff-selected guests stop all messaging.
+  router.post('/api/guests/bulk-delete', async (req, res, next) => {
+    try {
+      const ids = (req.body?.ids ?? []).map(Number).filter(Number.isInteger);
+      if (!ids.length) return res.status(400).json({ error: 'no guests selected' });
+      const rows = await query(
+        `UPDATE guests SET archived = TRUE WHERE id = ANY($1) AND archived = FALSE RETURNING id, name`,
+        [ids]
+      );
+      res.json({ deleted: rows.length, names: rows.map((r) => r.name) });
+    } catch (err) {
+      next(err);
+    }
+  });
+
   return router;
 }

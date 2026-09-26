@@ -247,6 +247,7 @@ export async function runJourneyScheduler() {
 
 // Manual template send (welcome / review) with dedupe.
 export async function sendManualTemplate(guestIds, templateName) {
+  const { queueMessage } = await import('../messaging/outbound.js');
   const sent = [];
   const skipped = [];
   for (const guestId of guestIds) {

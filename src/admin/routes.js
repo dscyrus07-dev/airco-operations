@@ -25,6 +25,7 @@ import {
   getReviewUrl,
   setReviewUrl,
   validateTemplateBody,
+  buildTemplateExamples,
   TEMPLATE_NAMES,
 } from '../templates/store.js';
 import { queueMessage, dispatchPending } from '../messaging/outbound.js';
@@ -454,9 +455,9 @@ export function adminRouter() {
         if (j.variables && Object.keys(j.variables).length) examples = j.variables;
       }
       const varCount = (body.match(/\{\{\d+\}\}/g) ?? []).length;
-      const trimmedExamples = Object.fromEntries(
-        Object.entries(examples).slice(0, Math.max(1, varCount))
-      );
+      // FIX 8 follow-up: fill example gaps when an edit ADDS variables —
+      // Meta rejects submissions where any variable lacks an example.
+      const trimmedExamples = buildTemplateExamples(examples, varCount);
 
       const createRes = await fetch('https://content.twilio.com/v1/Content', {
         method: 'POST',

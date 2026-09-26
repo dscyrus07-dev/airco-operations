@@ -78,6 +78,18 @@ export async function setReviewUrl(url) {
   );
 }
 
+// Meta requires a self-evident example for EVERY variable. When an edit adds
+// variables the old content didn't have, fill the gaps with sensible defaults
+// (this exact gap caused the 2388043 "BODY missing example" rejection).
+export function buildTemplateExamples(oldExamples, varCount) {
+  const defaults = { 1: 'Cyrus', 2: '29 Sep', 3: '30 Sep', 4: 'Room 203' };
+  const filled = { ...(oldExamples ?? {}) };
+  for (let i = 1; i <= varCount; i++) {
+    if (!filled[String(i)]) filled[String(i)] = defaults[String(i)] ?? 'Example';
+  }
+  return Object.fromEntries(Object.entries(filled).slice(0, Math.max(1, varCount)));
+}
+
 // Meta WhatsApp rule: a template body may not START or END with a variable.
 // Returns an error string when invalid, null when valid.
 export function validateTemplateBody(body) {

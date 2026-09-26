@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { validateTemplateBody } from '../src/templates/store.js';
+import { validateTemplateBody, buildTemplateExamples } from '../src/templates/store.js';
 import { TEMPLATES, templateVariables, renderTemplateBody } from '../src/templates/definitions.js';
 
 // FIX 1 (C1): the variable-at-end regex was /{{d+}}s*$/ — matched nothing.
@@ -49,4 +49,12 @@ test('FIX 8: rendered checkin_info shows the real arrival date for a 3-days-out 
   assert.ok(!/tomorrow/i.test(rendered));
   assert.match(rendered, /checking in at Zostel Mumbai on 29 Sep/);
   assert.match(rendered, /Vedank/);
+});
+
+// Editor follow-up: edits that ADD variables must fill example gaps —
+// Meta rejects (2388043) when any variable lacks an example.
+test('FIX 8: buildTemplateExamples fills gaps when variables are added', () => {
+  assert.deepEqual(buildTemplateExamples({ 1: 'Cyrus' }, 2), { 1: 'Cyrus', 2: '29 Sep' });
+  assert.deepEqual(buildTemplateExamples({}, 4), { 1: 'Cyrus', 2: '29 Sep', 3: '30 Sep', 4: 'Room 203' });
+  assert.deepEqual(buildTemplateExamples({ 1: 'A', 2: 'B', 3: 'C' }, 2), { 1: 'A', 2: 'B' });
 });

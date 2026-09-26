@@ -61,7 +61,12 @@ export function adminRouter() {
                 (SELECT count(*) FROM messages m
                   WHERE m.guest_id = g.id AND m.direction = 'out' AND m.message_type = 'template'
                     AND (m.created_at AT TIME ZONE 'Asia/Kolkata')::date
-                      = (now() AT TIME ZONE 'Asia/Kolkata')::date)::int AS proactive_today
+                      = (now() AT TIME ZONE 'Asia/Kolkata')::date)::int AS proactive_today,
+                (SELECT count(*) FROM messages mw
+                  WHERE mw.guest_id = g.id AND mw.template_name = 'welcome'
+                    AND mw.status IN ('queued','sent','delivered','read'))::int AS welcome_sent,
+                (SELECT count(*) FROM messages mr WHERE mr.guest_id = g.id AND mr.template_name = 'review_request'
+                    AND mr.status IN ('queued','sent','delivered','read'))::int AS review_sent
          FROM guests g
          WHERE g.archived = FALSE
          ORDER BY g.id DESC
@@ -86,7 +91,7 @@ export function adminRouter() {
         [id]
       );
       if (guests.length === 0) return res.status(404).json({ error: 'guest not found' });
-      const [messages, events, requests] = await Promise.all([
+      const [messages, events, requests, bookings] = await Promise.all([
         query(
           `SELECT id, direction, message_type, template_name, status, content, trigger_reason, wa_message_id, retry_count, last_error, created_at
            FROM messages WHERE guest_id = $1 ORDER BY id DESC LIMIT 100`,
@@ -102,8 +107,14 @@ export function adminRouter() {
            FROM requests WHERE guest_id = $1 ORDER BY id DESC LIMIT 20`,
           [id]
         ),
+        query(
+          `SELECT id, reservation_number, pre_arrival_due_at, pre_arrival_sent_at, pre_arrival_status,
+                  checkout_reminder_due_at, checkout_reminder_sent_at, checkout_reminder_status
+           FROM bookings WHERE guest_id = $1 ORDER BY id DESC LIMIT 5`,
+          [id]
+        ),
       ]);
-      res.json({ guest: guests[0], messages, events, requests });
+      res.json({ guest: guests[0], messages, events, requests, bookings: bookings.rows });
     } catch (err) {
       next(err);
     }

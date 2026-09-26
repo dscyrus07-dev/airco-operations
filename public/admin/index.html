@@ -501,6 +501,7 @@ let guestsCache = [];
 let activitiesCache = [];
 let usageCache = null;
 let guestFilter = 'all';
+let selectedGuestIds = new Set();
 let activityFilter = 'all';
 
 function token() { return localStorage.getItem(KEY) || ''; }
@@ -927,27 +928,86 @@ function renderProfile(g) {
 
 function renderJourney(d) {
   const g = d.guest;
-  const has = (tpl) => d.messages.some(m => m.template_name === tpl && ['sent','delivered','read'].includes(m.status));
-  const inHouse = ['checked_in','in_stay','checkout_pending'].includes(g.journey_state);
+  const booking = (d.bookings ?? [])[0] ?? null;
+  const msgFor = (tpl) => d.messages.find(m => m.template_name === tpl && ['queued','sent','delivered','read','failed'].includes(m.status));
+  const evAt = (event) => { const e = d.events.find(x => x.event === event); return e ? fmtTs(e.created_at) : null; };
   const stateOrder = ['booked','pre_arrival','checked_in','in_stay','checkout_pending','checked_out','review_requested','closed'];
   const atLeast = (s) => stateOrder.indexOf(g.journey_state) >= stateOrder.indexOf(s);
+
+  const bc = msgFor('booking_confirmation');
+  const pa = msgFor('checkin_info');
+  const wl = msgFor('welcome');
+  const cr = msgFor('checkout_reminder');
+  const rv = msgFor('review_request');
+
   const steps = [
-    { label: 'Booking confirmed', done: has('booking_confirmation') },
-    { label: 'Pre-arrival sent', done: has('checkin_info') || ['checked_in','in_stay','checkout_pending','checked_out','review_requested','closed'].includes(g.journey_state) },
-    { label: 'Checked in', done: ['checked_in','in_stay','checkout_pending','checked_out','review_requested','closed'].includes(g.journey_state) },
-    { label: 'In-house stay', done: ['checkout_pending','checked_out','review_requested','closed'].includes(g.journey_state), active: inHouse },
-    { label: 'Checkout reminder', done: has('checkout_reminder') },
-    { label: 'Review request', done: has('review_request') },
-    { label: 'Journey closed', done: g.journey_state === 'closed' },
+    {
+      label: 'Booking confirmed',
+      state: bc ? (bc.status === 'failed' ? 'failed' : 'done') : 'waiting',
+      time: bc ? fmtTs(bc.created_at) : evAt('booking_created'),
+      note: bc ? 'WhatsApp: ' + bc.status : null,
+    },
+    {
+      label: 'Pre-arrival',
+      state: booking?.pre_arrival_sent_at ? 'done'
+        : booking?.pre_arrival_due_at ? 'scheduled'
+        : pa ? (pa.status === 'failed' ? 'failed' : 'done')
+        : 'waiting',
+      time: booking?.pre_arrival_sent_at ? fmtTs(booking.pre_arrival_sent_at)
+        : booking?.pre_arrival_due_at ? 'Scheduled · ' + fmtTs(booking.pre_arrival_due_at)
+        : (pa ? fmtTs(pa.created_at) : null),
+      note: pa ? 'WhatsApp: ' + pa.status : null,
+    },
+    {
+      label: 'Check-in',
+      state: atLeast('checked_in') ? 'done' : 'waiting',
+      time: evAt('checked_in'),
+      note: evAt('checked_in') ? 'Manual' : 'Waiting for staff',
+    },
+    {
+      label: 'Welcome',
+      state: wl ? (wl.status === 'failed' ? 'failed' : 'done')
+        : atLeast('checked_in') ? 'available' : 'waiting',
+      time: wl ? fmtTs(wl.created_at) : null,
+      note: wl ? 'WhatsApp: ' + wl.status : null,
+    },
+    {
+      label: 'In stay',
+      state: ['checkout_pending','checked_out','review_requested','closed'].includes(g.journey_state) ? 'done'
+        : ['checked_in','in_stay'].includes(g.journey_state) ? 'current' : 'waiting',
+    },
+    {
+      label: 'Checkout reminder',
+      state: booking?.checkout_reminder_sent_at ? (booking.checkout_reminder_status === 'skipped_already_checked_out' ? 'skipped' : 'done')
+        : booking?.checkout_reminder_due_at ? 'scheduled'
+        : atLeast('checkout_pending') ? 'done' : 'waiting',
+      time: booking?.checkout_reminder_sent_at ? fmtTs(booking.checkout_reminder_sent_at)
+        : booking?.checkout_reminder_due_at ? 'Scheduled · ' + fmtTs(booking.checkout_reminder_due_at) : null,
+    },
+    {
+      label: 'Review request',
+      state: rv ? (rv.status === 'failed' ? 'failed' : 'done')
+        : ['checked_out','review_requested'].includes(g.journey_state) ? 'available'
+        : atLeast('review_requested') ? 'done' : 'waiting',
+      time: rv ? fmtTs(rv.created_at) : null,
+      note: rv ? 'WhatsApp: ' + rv.status : null,
+    },
+    {
+      label: 'Journey closed',
+      state: g.journey_state === 'closed' ? 'done' : 'waiting',
+    },
   ];
+
+  const icon = { done: '✓', current: '●', scheduled: '⏳', available: '○', waiting: '○', failed: '⚠️', skipped: '—' };
+  const color = { done: 'var(--green)', current: 'var(--accent)', scheduled: 'var(--accent)', available: 'var(--dim)', waiting: 'var(--faint)', failed: 'var(--red)', skipped: 'var(--faint)' };
+  const timeline = steps.map(s => `
+    <div class="tl-item" style="border-left-color:${s.state === 'done' ? '#d1fae5' : 'var(--line)'}">
+      <b style="color:${color[s.state] ?? 'var(--text)'}">${icon[s.state] ?? '○'} ${esc(s.label)}</b>
+      ${s.time ? '<div class="t">' + esc(s.time) + '</div>' : ''}
+      ${s.note ? '<div class="t">' + esc(s.note) + '</div>' : ''}
+    </div>`).join('');
+
   const pct = journeyPct(g);
-  const stepper = `
-    <div class="progress" style="margin-bottom:14px"><div class="jbar-fill" style="width:${pct}%"></div></div>
-    <div class="jsteps">${steps.map(s => `
-      <div class="jstep ${s.done?'done':s.active?'now':''}">
-        <span class="jstep-ic">${s.done ? '✓' : s.active ? '●' : '○'}</span> ${esc(s.label)}
-        ${s.active ? '<span class="badge b-checked_in">now</span>' : ''}
-      </div>`).join('')}</div>`;
   const events = d.events.map(e => `
     <div class="tl-item">
       ${e.from_state ? esc(e.from_state) + ' &rarr; ' : ''}<b>${esc(e.to_state)}</b>
@@ -956,7 +1016,9 @@ function renderJourney(d) {
     </div>`).join('');
   const reqs = d.requests.length === 0 ? '<div style="color:var(--dim);font-size:13px">No service requests.</div>' :
     d.requests.map(r => `<div class="tl-item"><b>${esc(r.request_type)}</b> — ${esc(r.status)} <span style="color:var(--dim)">${esc(r.description||'')}</span><div class="t">${fmtTs(r.created_at)}</div></div>`).join('');
-  return `<div class="section-h">Journey progress — ${pct}%</div>${stepper}
+  return `<div class="section-h">Journey progress — ${pct}%</div>
+    <div class="progress" style="margin-bottom:14px"><div class="jbar-fill" style="width:${pct}%"></div></div>
+    <div class="jsteps">${timeline}</div>
     <div class="section-h">Audit trail (append-only)</div>${events || '<div style="color:var(--dim)">No events yet.</div>'}
     <div class="section-h">Service requests</div>${reqs}`;
 }
@@ -1478,6 +1540,65 @@ async function saveReviewUrl() {
     await api('/templates/review_request', { method: 'PUT', body: JSON.stringify({ body: t.body, reviewUrl: url }) });
     reviewUrlCache = url;
     toast('Review link saved ✓');
+  } catch (e) { toast(e.message, true); }
+}
+
+/* ---------- BULK SELECTION ---------- */
+function toggleGuestSelect(id) {
+  if (selectedGuestIds.has(id)) selectedGuestIds.delete(id);
+  else selectedGuestIds.add(id);
+  renderGuestList();
+}
+function clearGuestSelection() { selectedGuestIds.clear(); renderGuestList(); }
+function selectAllEligible(kind) {
+  for (const g of guestsCache) {
+    if (kind === 'welcome' && ['checked_in','in_stay','checkout_pending'].includes(g.journey_state) && !g.welcome_sent) selectedGuestIds.add(g.id);
+    else if (kind === 'review' && ['checked_out','review_requested'].includes(g.journey_state) && !g.review_sent) selectedGuestIds.add(g.id);
+  }
+  renderGuestList();
+}
+function renderBulkBar() {
+  const bar = document.getElementById('bulk-selection-bar');
+  if (!bar) return;
+  const n = selectedGuestIds.size;
+  if (n === 0) { bar.style.display = 'none'; return; }
+  const list = guestsCache.filter(g => selectedGuestIds.has(g.id));
+  const welcomeEligible = list.filter(g => ['checked_in','in_stay','checkout_pending'].includes(g.journey_state) && !g.welcome_sent).length;
+  const reviewEligible = list.filter(g => ['checked_out','review_requested'].includes(g.journey_state) && !g.review_sent).length;
+  bar.style.display = 'block';
+  bar.innerHTML = `
+    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+      <b style="font-size:13px">${n} selected</b>
+      <button class="btn small" ${welcomeEligible ? '' : 'disabled'} onclick="bulkSend('welcome')">Send Welcome (${welcomeEligible})</button>
+      <button class="btn small" ${reviewEligible ? '' : 'disabled'} onclick="bulkSend('review')">Send Review (${reviewEligible})</button>
+      <button class="btn ghost small" onclick="clearGuestSelection()">Clear</button>
+    </div>`;
+}
+
+async function bulkSend(kind) {
+  const list = guestsCache.filter(g => selectedGuestIds.has(g.id));
+  const eligible = list.filter(g =>
+    kind === 'welcome'
+      ? ['checked_in','in_stay','checkout_pending'].includes(g.journey_state) && !g.welcome_sent
+      : ['checked_out','review_requested'].includes(g.journey_state) && !g.review_sent
+  );
+  if (!eligible.length) { toast('No eligible guests in selection.', true); return; }
+  const label = kind === 'welcome' ? 'welcome message' : 'review request';
+  const ok = await confirmDialog({
+    title: 'Send ' + label + '?',
+    message: eligible.length + ' of ' + selectedGuestIds.size + ' selected guests are eligible. Already-sent and ineligible guests will be skipped.',
+    confirmText: 'Send to ' + eligible.length,
+  });
+  if (!ok) return;
+  try {
+    const r = await api('/guests/send-' + (kind === 'welcome' ? 'welcome' : 'review'), {
+      method: 'POST', body: JSON.stringify({ ids: eligible.map(g => g.id) }),
+    });
+    celebrate(label + ' sent to ' + r.sent + ' guest' + (r.sent === 1 ? '' : 's'));
+    const skipped = (r.skipped ?? []).map(s => s.name || ('#' + s.id) + ' (' + (s.reason ?? '') + ')');
+    if (skipped.length) toast('Skipped: ' + skipped.join(', '));
+    selectedGuestIds.clear();
+    loadGuests();
   } catch (e) { toast(e.message, true); }
 }
 

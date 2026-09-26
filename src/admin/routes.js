@@ -24,6 +24,7 @@ import {
   setTemplateContentSid,
   getReviewUrl,
   setReviewUrl,
+  validateTemplateBody,
   TEMPLATE_NAMES,
 } from '../templates/store.js';
 import { queueMessage, dispatchPending } from '../messaging/outbound.js';
@@ -304,7 +305,7 @@ export function adminRouter() {
       const id = Number(req.params.id);
       if (!Number.isInteger(id)) return res.status(400).json({ error: 'bad id' });
       const rows = await query(
-        `UPDATE messages SET status = 'queued', retry_count = 0
+        `UPDATE messages SET status = 'queued', retry_count = 0, next_attempt_at = now()
          WHERE id = $1 AND status = 'failed'
          RETURNING id`,
         [id]
@@ -429,12 +430,9 @@ export function adminRouter() {
       const name = String(req.params.name);
       if (!TEMPLATE_NAMES.includes(name)) return res.status(400).json({ error: 'unknown template' });
       const body = String(req.body?.body ?? '').trim();
-      if (!body) return res.status(400).json({ error: 'template body is required' });
-      if (body.length > 1024) return res.status(400).json({ error: 'template body too long (max 1024 chars)' });
       // Meta rule: variables can't be at the very start or end of the body
-      if (/^{{/.test(body) || /{{d+}}s*$/.test(body)) {
-        return res.status(400).json({ error: 'Meta rejects variables at the start or end — add a short line of text after the last {{n}}.' });
-      }
+      const bodyError = validateTemplateBody(body);
+      if (bodyError) return res.status(400).json({ error: bodyError });
 
       if (req.body?.reviewUrl !== undefined && name === 'review_request') {
         await setReviewUrl(String(req.body.reviewUrl ?? '').trim());

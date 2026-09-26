@@ -48,14 +48,14 @@ CREATE TABLE IF NOT EXISTS bookings (
 -- Reservation identity: one row per reservation number (suffixes -1/-2 are
 -- distinct reservations). Blank reservation numbers (non-booking rows) are
 -- not unique-constrained.
-CREATE UNIQUE INDEX idx_bookings_res_unique
+CREATE UNIQUE INDEX IF NOT EXISTS idx_bookings_res_unique
   ON bookings (reservation_number)
   WHERE reservation_number IS NOT NULL AND reservation_number <> '';
-CREATE INDEX idx_bookings_guest ON bookings (guest_id);
-CREATE INDEX idx_bookings_batch ON bookings (batch_id);
-CREATE INDEX idx_bookings_pre_arrival_due ON bookings (pre_arrival_due_at)
+CREATE INDEX IF NOT EXISTS idx_bookings_guest ON bookings (guest_id);
+CREATE INDEX IF NOT EXISTS idx_bookings_batch ON bookings (batch_id);
+CREATE INDEX IF NOT EXISTS idx_bookings_pre_arrival_due ON bookings (pre_arrival_due_at)
   WHERE pre_arrival_sent_at IS NULL;
-CREATE INDEX idx_bookings_checkout_due ON bookings (checkout_reminder_due_at)
+CREATE INDEX IF NOT EXISTS idx_bookings_checkout_due ON bookings (checkout_reminder_due_at)
   WHERE checkout_reminder_sent_at IS NULL;
 
 

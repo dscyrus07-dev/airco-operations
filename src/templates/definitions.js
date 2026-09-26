@@ -57,10 +57,9 @@ export const TEMPLATES = [
     category: 'utility',
     body:
       'Hey {{1}} 👋\n' +
-      'Your Mumbai stay is almost at its final chapter.\n\n' +
-      '🕙 Check-out tomorrow by 10:00 AM.\n' +
-      'Do a quick sweep for chargers, chargers cables and that one sock hiding under the bed 😄\n\n' +
-      'Need anything before you head out? We\'re right here.',
+      'Your Mumbai stay is wrapping up — check-out is by 10:00 AM today.\n' +
+      'Do a quick sweep for chargers, cables and that one sock hiding under the bed 😄\n\n' +
+      'Running late or need anything? Just reply here — we\'ve got you 😎',
   },
   {
     name: 'review_request',

@@ -4,20 +4,39 @@
 import { query } from '../db.js';
 import { getConfig } from '../config.js';
 import { parseBulkReport } from './bulk-parse.js';
+import { queueMessage } from '../messaging/outbound.js';
 
-// Upsert a guest profile by normalized phone — one guest, many reservations.
+// Journey-state model (FIX 2 / C2 decision):
+// journey_state stays PER-GUEST and represents the guest's CURRENT journey.
+// A guest may hold many reservations (bookings is reservation-keyed). Rules:
+//  - in-house states (checked_in/in_stay/checkout_pending): a new reservation
+//    NEVER regresses state or overwrites stay data — it is recorded in
+//    bookings only; its confirmation still fires.
+//  - upcoming states (booked/pre_arrival): refresh stay data from the newest
+//    reservation but keep the state (resetting pre_arrival would re-send).
+//  - finished states (checked_out/review_requested/closed): the new
+//    reservation starts a fresh journey -> 'booked' + unarchive.
+const IN_HOUSE_STATES = ['checked_in', 'in_stay', 'checkout_pending'];
+const JOURNEY_DONE_STATES = ['checked_out', 'review_requested', 'closed'];
+
 async function upsertGuest(parsed) {
-  const existing = await query('SELECT id FROM guests WHERE phone = $1', [parsed.contact_number]);
+  const existing = await query(
+    'SELECT id, journey_state FROM guests WHERE phone = $1',
+    [parsed.contact_number]
+  );
   if (existing.length > 0) {
+    const g = existing[0];
+    if (IN_HOUSE_STATES.includes(g.journey_state)) return g.id; // active stay untouched
+    const startNewJourney = JOURNEY_DONE_STATES.includes(g.journey_state);
     await query(
       `UPDATE guests SET name = COALESCE(NULLIF($2, ''), name), room = COALESCE($3, room),
          check_in = COALESCE($4, check_in), check_out = COALESCE($5, check_out),
-         journey_state = CASE WHEN journey_state = 'closed' THEN journey_state ELSE 'booked' END,
+         journey_state = ${startNewJourney ? "'booked'" : 'journey_state'},
          archived = FALSE
-       WHERE id = $1 RETURNING id`,
-      [existing[0].id, parsed.guest_name, parsed.room_number, parsed.arrival, parsed.departure]
+       WHERE id = $1`,
+      [g.id, parsed.guest_name, parsed.room_number, parsed.arrival, parsed.departure]
     );
-    return existing[0].id;
+    return g.id;
   }
   const rows = await query(
     `INSERT INTO guests (phone, name, property, room, check_in, check_out, journey_state, whatsapp_opt_in)
@@ -25,6 +44,38 @@ async function upsertGuest(parsed) {
     [parsed.contact_number, parsed.guest_name, parsed.room_number, parsed.arrival, parsed.departure]
   );
   return rows[0].id;
+}
+
+// When a guest checks out and holds a FUTURE reservation, hand the guest row
+// over to that booking so staff can check them in for the new stay (the state
+// machine only allows checked_in from booked/pre_arrival).
+export async function handoverToFutureBooking(guestId) {
+  const future = await query(
+    `SELECT id, reservation_number, room_number, arrival, departure FROM bookings
+     WHERE guest_id = $1
+       AND (departure AT TIME ZONE 'Asia/Kolkata')::date
+           >= (now() AT TIME ZONE 'Asia/Kolkata')::date
+     ORDER BY arrival ASC LIMIT 1`,
+    [guestId]
+  );
+  if (!future.length) return false;
+  const b = future[0];
+  const rows = await query(
+    `UPDATE guests SET journey_state = 'booked',
+       room = COALESCE($2, room),
+       check_in = COALESCE(($3::timestamptz AT TIME ZONE 'Asia/Kolkata')::date, check_in),
+       check_out = COALESCE(($4::timestamptz AT TIME ZONE 'Asia/Kolkata')::date, check_out)
+     WHERE id = $1 AND journey_state = 'checked_out'
+     RETURNING id`,
+    [guestId, b.room_number, b.arrival, b.departure]
+  );
+  if (!rows.length) return false;
+  await query(
+    `INSERT INTO journey_events (guest_id, from_state, to_state, event, detail)
+     VALUES ($1, 'checked_out', 'booked', 'future_booking_handover', $2)`,
+    [guestId, b.reservation_number ? `reservation ${b.reservation_number}` : null]
+  );
+  return true;
 }
 
 export async function importBulkReport(text, { uploadedBy = 'dashboard', execute = false } = {}) {
@@ -136,7 +187,7 @@ async function insertBookingRow(row, guestId, batchId, classification, opts = {}
 function istDateAt1300(departure) {
   const d = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(departure);
   const [y, m, day] = d.split('-').map(Number);
-  return new Date(Date.UTC(y, m - 1, day, 13 - 5, 30));
+  return new Date(Date.UTC(y, m - 1, day, 7, 30)); // 13:00 IST == 07:30 UTC
 }
 
 async function queueConfirmation(guestId, parsed) {
@@ -150,11 +201,8 @@ async function queueConfirmation(guestId, parsed) {
     check_out: parsed.departure?.toISOString?.().slice(0, 10),
   };
   const vars = await buildTemplateVars('booking_confirmation', guest);
-  await query(
-    `UPDATE guests SET journey_state = 'booked', check_in = $2, check_out = $3, room = COALESCE($4, room)
-     WHERE id = $1`,
-    [guestId, parsed.arrival, parsed.departure, parsed.room_number]
-  );
+  // NOTE (FIX 2): journey_state / stay dates are managed by upsertGuest only —
+  // the confirmation must never regress an in-house guest's state.
   await queueMessage({
     guestId,
     messageType: 'template',
@@ -162,6 +210,11 @@ async function queueConfirmation(guestId, parsed) {
     templateComponents: [{ type: 'body', parameters: vars.map((text) => ({ type: 'text', text: String(text ?? '') })) }],
     triggerReason: 'bulk_import:booking_created',
   });
+}
+
+// YYYY-MM-DD in Asia/Kolkata — lexicographic date comparison for sanity gates.
+function istDateStr(d) {
+  return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(d);
 }
 
 // Outbound template messages sent to a guest today (IST) — for the daily cap.
@@ -189,9 +242,14 @@ export async function runJourneyScheduler() {
        AND b.pre_arrival_sent_at IS NULL
        AND b.pre_arrival_due_at <= now()`
   );
-  for (const b of duePre.rows) {
+  for (const b of duePre) {
     if (b.archived || b.whatsapp_opt_in === false) {
       await query(`UPDATE bookings SET pre_arrival_sent_at = now(), pre_arrival_status = 'skipped' WHERE id = $1`, [b.id]);
+      continue;
+    }
+    // H6 sanity gate: never pre-announce a stay whose arrival is already past.
+    if (b.arrival && istDateStr(b.arrival) < istDateStr(new Date())) {
+      await query(`UPDATE bookings SET pre_arrival_sent_at = now(), pre_arrival_status = 'skipped_backdated' WHERE id = $1`, [b.id]);
       continue;
     }
     if (b.ai_paused) {
@@ -204,7 +262,7 @@ export async function runJourneyScheduler() {
     }
     const already = await query(
       `SELECT 1 FROM messages WHERE guest_id = $1 AND template_name = 'checkin_info'
-       AND status IN ('queued','sent','delivered','read') LIMIT 1`,
+       AND status IN ('queued','sending','sent','delivered','read') LIMIT 1`,
       [b.guest_id]
     );
     if (already.length > 0) {
@@ -237,9 +295,19 @@ export async function runJourneyScheduler() {
        AND b.checkout_reminder_sent_at IS NULL
        AND b.checkout_reminder_due_at <= now()`
   );
-  for (const b of dueCheckout.rows) {
+  for (const b of dueCheckout) {
     if (['checked_out', 'review_requested', 'closed'].includes(b.journey_state) || b.archived) {
       await query(`UPDATE bookings SET checkout_reminder_sent_at = now(), checkout_reminder_status = 'skipped_already_checked_out' WHERE id = $1`, [b.id]);
+      continue;
+    }
+    // H6 sanity gates: never remind about a stay whose departure is already
+    // past, and never fire a reminder more than 24h stale.
+    if (b.departure && istDateStr(b.departure) < istDateStr(new Date())) {
+      await query(`UPDATE bookings SET checkout_reminder_sent_at = now(), checkout_reminder_status = 'skipped_backdated' WHERE id = $1`, [b.id]);
+      continue;
+    }
+    if (b.checkout_reminder_due_at < new Date(Date.now() - 86_400_000)) {
+      await query(`UPDATE bookings SET checkout_reminder_sent_at = now(), checkout_reminder_status = 'skipped_stale' WHERE id = $1`, [b.id]);
       continue;
     }
     if (b.ai_paused) {
@@ -252,7 +320,7 @@ export async function runJourneyScheduler() {
     }
     const already = await query(
       `SELECT 1 FROM messages WHERE guest_id = $1 AND template_name = 'checkout_reminder'
-       AND status IN ('queued','sent','delivered','read') LIMIT 1`,
+       AND status IN ('queued','sending','sent','delivered','read') LIMIT 1`,
       [b.guest_id]
     );
     if (already.length > 0) {
@@ -268,9 +336,23 @@ export async function runJourneyScheduler() {
       templateComponents: [{ type: 'body', parameters: vars.map((text) => ({ type: 'text', text: String(text ?? '') })) }],
       triggerReason: `bulk_import:checkout_reminder:${b.id}`,
     });
+    // FIX 5: the surviving trigger owns the checkout_pending transition that
+    // the retired legacy tick used to perform.
+    if (['checked_in', 'in_stay'].includes(b.journey_state)) {
+      await query(
+        `UPDATE guests SET journey_state = 'checkout_pending'
+         WHERE id = $1 AND journey_state IN ('checked_in','in_stay')`,
+        [b.guest_id]
+      );
+      await query(
+        `INSERT INTO journey_events (guest_id, from_state, to_state, event, detail)
+         VALUES ($1, $2, 'checkout_pending', 'checkout_reminder_tick', $3)`,
+        [b.guest_id, b.journey_state, `checkout_reminder booking ${b.id}`]
+      );
+    }
     await query(`UPDATE bookings SET checkout_reminder_sent_at = now(), checkout_reminder_status = 'sent' WHERE id = $1`, [b.id]);
   }
-  return { preArrival: duePre.rows.length, checkout: dueCheckout.rows.length };
+  return { preArrival: duePre.length, checkout: dueCheckout.length };
 }
 
 // Manual template send (welcome / review) with dedupe.
@@ -289,7 +371,7 @@ export async function sendManualTemplate(guestIds, templateName) {
     if (g.ai_paused) { skipped.push({ id: g.id, name: g.name, reason: 'AI paused' }); continue; }
     const already = await query(
       `SELECT 1 FROM messages WHERE guest_id = $1 AND template_name = $2
-       AND status IN ('queued','sent','delivered','read') LIMIT 1`,
+       AND status IN ('queued','sending','sent','delivered','read') LIMIT 1`,
       [g.id, templateName]
     );
     if (already.length > 0) { skipped.push({ id: g.id, name: g.name, reason: 'already sent' }); continue; }

@@ -78,6 +78,18 @@ export async function setReviewUrl(url) {
   );
 }
 
+// Meta WhatsApp rule: a template body may not START or END with a variable.
+// Returns an error string when invalid, null when valid.
+export function validateTemplateBody(body) {
+  const b = String(body ?? '').trim();
+  if (!b) return 'template body is required';
+  if (b.length > 1024) return 'template body too long (max 1024 chars)';
+  if (/^\{\{/.test(b) || /\{\{\d+\}\}\s*$/.test(b)) {
+    return 'Meta rejects variables at the start or end — add a short line of text after the last {{n}}.';
+  }
+  return null;
+}
+
 // Build the variable values for a template at send time — same positions as
 // the built-in definitions, but the review link now comes from app_settings.
 export async function buildTemplateVars(name, guest) {

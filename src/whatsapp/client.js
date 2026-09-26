@@ -10,6 +10,27 @@ export function isRetryableError(err) {
   return true;
 }
 
+// FIX 3: reconcile a claimed-but-unconfirmed send by asking Twilio for the
+// message's actual status. Returns our canonical status or null.
+export async function fetchMessageStatus(messageSid) {
+  if (process.env.WHATSAPP_DRY_RUN === 'true') return null;
+  const { sid, authToken } = twilioConfig();
+  const res = await fetch(
+    `https://api.twilio.com/2010-04-01/Accounts/${sid}/Messages/${encodeURIComponent(messageSid)}.json`,
+    {
+      headers: { Authorization: 'Basic ' + Buffer.from(`${sid}:${authToken}`).toString('base64') },
+      signal: AbortSignal.timeout(8000),
+    }
+  );
+  if (!res.ok) return null;
+  const body = await res.json().catch(() => ({}));
+  const map = {
+    accepted: 'sent', queued: 'queued', scheduled: 'queued', sent: 'sent',
+    delivered: 'delivered', read: 'read', failed: 'failed', undelivered: 'failed',
+  };
+  return map[body.status] ?? null;
+}
+
 function twilioConfig() {
   const sid = process.env.TWILIO_ACCOUNT_SID;
   const authToken = process.env.TWILIO_AUTH_TOKEN;

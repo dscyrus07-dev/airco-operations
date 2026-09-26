@@ -50,7 +50,40 @@ export async function handleBookingWebhook(b) {
       b?.whatsapp_opt_in === true || b?.whatsapp_opt_in === 'true',
     ]
   );
-  return rows[0];
+  const guest = rows[0];
+  // FIX 5 (H4): manually-added guests join the SAME bookings-driven checkout
+  // reminder (departure date 13:00 IST) — the legacy day-before tick is
+  // retired, so their reminder schedule lives on a bookings row too.
+  // pre_arrival_due_at stays NULL: the legacy day-before pre-arrival tick
+  // still covers non-bulk guests (out of Phase 1 scope).
+  if (guest?.check_out) {
+    // pg returns DATE columns as JS Dates — normalize to the IST calendar date
+    const co = guest.check_out instanceof Date
+      ? new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(guest.check_out)
+      : String(guest.check_out).slice(0, 10);
+    const [y, m, d] = co.split('-').map(Number);
+    const dueAt = new Date(Date.UTC(y, m - 1, d, 7, 30)); // 13:00 IST == 07:30 UTC
+    const existingManual = await query(
+      'SELECT id FROM bookings WHERE guest_id = $1 AND reservation_number IS NULL LIMIT 1',
+      [guest.id]
+    );
+    if (existingManual.length > 0) {
+      await query(
+        `UPDATE bookings SET arrival = $2, departure = $3, checkout_reminder_due_at = $4,
+           room_number = COALESCE($5, room_number), classification = 'BOOKING'
+         WHERE id = $1`,
+        [existingManual[0].id, guest.check_in, guest.check_out, dueAt, guest.room]
+      );
+    } else {
+      await query(
+        `INSERT INTO bookings (guest_id, guest_name, contact_number, room_number,
+           arrival, departure, classification, checkout_reminder_due_at)
+         VALUES ($1, $2, $3, $4, $5, $6, 'BOOKING', $7)`,
+        [guest.id, guest.name, guest.phone, guest.room, guest.check_in, guest.check_out, dueAt]
+      );
+    }
+  }
+  return guest;
 }
 
 export async function applyEventToGuest(guest, eventName, detail, asOf = new Date()) {
@@ -81,6 +114,14 @@ export async function applyEventToGuest(guest, eventName, detail, asOf = new Dat
   let queued = null;
   if (t.message) {
     queued = await maybeQueueProactive(guest, t.message, t.messageKind, eventName, asOf);
+  }
+  // FIX 2 (C2): after checkout, hand the guest row over to a future
+  // reservation if one exists, so the new stay can be checked in.
+  if (t.to === 'checked_out') {
+    const { handoverToFutureBooking } = await import('./bulk-import.js');
+    await handoverToFutureBooking(guest.id).catch((err) =>
+      console.error('[journey] future-booking handover error:', err)
+    );
   }
   await dispatchPending();
   return { transitioned: true, to: t.to, queued };
@@ -239,15 +280,9 @@ export async function runDateTick(asOf = new Date()) {
     await applyEventToGuest(g, 'in_stay_tick', `date_tick check_in=${g.check_in}`, asOf);
   }
 
-  if (hour >= cfg.checkoutReminderSendHour) {
-    const checkoutPending = await query(
-      `SELECT * FROM guests
-       WHERE journey_state IN ('checked_in', 'in_stay')
-         AND check_out = (($1::timestamptz AT TIME ZONE 'Asia/Kolkata')::date + 1)`,
-      [asOf]
-    );
-    for (const g of checkoutPending) {
-      await applyEventToGuest(g, 'checkout_reminder_tick', `date_tick check_out=${g.check_out}`, asOf);
-    }
-  }
+  // FIX 5 (H4): the legacy day-before checkout-reminder tick is RETIRED.
+  // The bookings-driven scheduler (runJourneyScheduler) is the single
+  // checkout-reminder trigger: departure DATE at 13:00 IST. Manually-added
+  // guests get a bookings row at creation (handleBookingWebhook) so they are
+  // covered by the same mechanism — no second parallel scheduler.
 }

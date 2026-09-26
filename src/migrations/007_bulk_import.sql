@@ -57,3 +57,9 @@ CREATE INDEX idx_bookings_pre_arrival_due ON bookings (pre_arrival_due_at)
   WHERE pre_arrival_sent_at IS NULL;
 CREATE INDEX idx_bookings_checkout_due ON bookings (checkout_reminder_due_at)
   WHERE checkout_reminder_sent_at IS NULL;
+
+
+-- Manual sends (explicit staff action) must bypass the one-per-stay journey
+-- dedupe: drop the blanket unique index and enforce idempotency per journey
+-- event in the scheduler instead (already checks sent/queued per template).
+DROP INDEX IF EXISTS uniq_messages_guest_template;

@@ -256,23 +256,18 @@ export async function sendManualTemplate(guestIds, templateName) {
       [guestId]
     );
     if (!guests.length) { skipped.push({ id: guestId, reason: 'not found' }); continue; }
-    const g = guests[0];
-    const already = await query(
-      `SELECT 1 FROM messages WHERE guest_id = $1 AND template_name = $2
-       AND status IN ('queued','sent','delivered','read') LIMIT 1`,
-      [g.id, templateName]
-    );
     if (already.length > 0) { skipped.push({ id: g.id, name: g.name, reason: 'already sent' }); continue; }
     const { buildTemplateVars } = await import('../templates/store.js');
     const vars = await buildTemplateVars(templateName, g);
-    await queueMessage({
+    const msg = await queueMessage({
       guestId: g.id,
       messageType: 'template',
       templateName,
       templateComponents: [{ type: 'body', parameters: vars.map((text) => ({ type: 'text', text: String(text ?? '') })) }],
       triggerReason: `manual:${templateName}`,
     });
-    sent.push({ id: g.id, name: g.name });
+    if (msg) sent.push({ id: g.id, name: g.name });
+    else skipped.push({ id: g.id, name: g.name, reason: 'duplicate suppressed' });
   }
   return { sent: sent.length, skipped };
 }

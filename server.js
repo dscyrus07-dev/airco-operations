@@ -131,6 +131,7 @@ setInterval(() => {
 }, TICK_INTERVAL_MS).unref();
 
 runDateTick(new Date()).catch((err) => console.error('[tick] boot error:', err));
+runJourneyScheduler().catch((err) => console.error('[journey] boot error:', err));
 dispatchPending().catch((err) => console.error('[dispatch] boot error:', err));
 
 app.listen(config.port, () => {

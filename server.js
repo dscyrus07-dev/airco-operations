@@ -12,6 +12,7 @@ import {
   findGuestByPhone,
 } from './src/agent/triggers.js';
 import { dispatchPending } from './src/messaging/outbound.js';
+import { runJourneyScheduler } from './src/agent/bulk-import.js';
 import { query, closePool } from './src/db.js';
 
 const config = loadConfig();
@@ -125,6 +126,7 @@ app.use(express.static(path.join(__dirname, 'public')));
 const TICK_INTERVAL_MS = 15 * 60_000;
 setInterval(() => {
   runDateTick(new Date()).catch((err) => console.error('[tick] error:', err));
+  runJourneyScheduler().catch((err) => console.error('[journey] error:', err));
   dispatchPending().catch((err) => console.error('[dispatch] error:', err));
 }, TICK_INTERVAL_MS).unref();
 

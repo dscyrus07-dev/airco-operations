@@ -497,5 +497,53 @@ export function adminRouter() {
     }
   });
 
+  // ---- Bulk import: Zostel operational report ----
+
+  // Preview (execute=false) or execute. Body: { text, execute }
+  router.post('/api/import/bookings', async (req, res) => {
+    try {
+      const text = String(req.body?.text ?? '');
+      if (!text.trim()) return res.status(400).json({ error: 'paste the report first' });
+      const execute = req.body?.execute === true;
+      const result = await importBulkReport(text, {
+        uploadedBy: 'dashboard',
+        execute,
+      });
+      if (execute) await dispatchPending();
+      res.json(result);
+    } catch (err) {
+      res.status(400).json({ error: err.message });
+    }
+  });
+
+  // Bulk welcome: manually send the approved welcome template to selected
+  // checked-in guests. Idempotent — already-sent guests are reported, not resent.
+  router.post('/api/guests/send-welcome', async (req, res) => {
+    try {
+      const ids = (req.body?.ids ?? []).map(Number).filter(Number.isInteger);
+      if (!ids.length) return res.status(400).json({ error: 'no guests selected' });
+      const { sendManualTemplate } = await import('../agent/bulk-import.js');
+      const result = await sendManualTemplate(ids, 'welcome');
+      await dispatchPending();
+      res.json(result);
+    } catch (err) {
+      res.status(400).json({ error: err.message });
+    }
+  });
+
+  // Bulk review request: manually send to selected checked-out guests.
+  router.post('/api/guests/send-review', async (req, res) => {
+    try {
+      const ids = (req.body?.ids ?? []).map(Number).filter(Number.isInteger);
+      if (!ids.length) return res.status(400).json({ error: 'no guests selected' });
+      const { sendManualTemplate } = await import('../agent/bulk-import.js');
+      const result = await sendManualTemplate(ids, 'review_request');
+      await dispatchPending();
+      res.json(result);
+    } catch (err) {
+      res.status(400).json({ error: err.message });
+    }
+  });
+
   return router;
 }

@@ -1072,51 +1072,87 @@ function openBulkAdd() {
   selectedId = null;
   renderGuestList();
   document.getElementById('detail').innerHTML = `
-    <div class="dhead"><div><div class="pname" style="font-size:15px">Bulk add bookings</div>
-      <div class="pmeta">One guest per line: <b>Name, Number, Room, Check-in, Check-out</b> — each guest gets the confirmation instantly.</div></div></div>
+    <div class="dhead"><div><div class="pname" style="font-size:15px">Bulk import bookings</div>
+      <div class="pmeta">Paste the complete Zostel report exactly as exported — we detect booking rows, guest details, payments and reservation type automatically.</div></div></div>
     <div class="dbody">
-      <label class="fl">Paste your guest list (comma separated)</label>
-      <textarea class="in" id="bulk-text" rows="9" placeholder="Rahul Sharma, 919876543210, 203, 2026-09-19, 2026-09-21&#10;Priya Patel, 919876543211, 204, 2026-09-19, 2026-09-23"></textarea>
+      <label class="fl">Paste today's Zostel booking report</label>
+      <textarea class="in" id="bulk-text" rows="10" style="font-size:12.5px;font-family:monospace" placeholder="Paste the full report — tab-separated or comma-separated. Header row optional."></textarea>
       <div style="margin-top:12px;display:flex;align-items:center;gap:10px">
-        <button class="btn" id="bulk-btn" onclick="bulkAdd()">Add all guests</button>
-        <span class="count" style="align-self:center">Every guest must have opted in to WhatsApp updates.</span>
+        <button class="btn secondary" id="bulk-preview-btn" onclick="previewBulk()">Preview</button>
+        <button class="btn" id="bulk-btn" onclick="bulkAdd()" style="display:none">Import bookings</button>
       </div>
-      <div id="bulk-progress" style="margin-top:10px;font-size:13px;color:var(--dim)"></div>
+      <div id="bulk-preview" style="margin-top:14px"></div>
     </div>`;
 }
 
+function renderBulkPreview(r) {
+  const s = r.summary;
+  const rows = (r.results ?? []).map((row, i) => `
+    <div class="prow" style="padding:8px 12px">
+      <div style="flex:1;font-size:12.5px">
+        <b>${esc(row.guest || row.raw?.[3] || '—')}</b>
+        ${row.resNo ? '· ' + esc(row.resNo) : ''} ${row.phone ? '· +' + esc(row.phone) : ''}
+        ${row.resType ? '· ' + esc(row.resType.replace(/_/g, ' ')) : ''}
+      </div>
+      <div style="font-size:12px;color:var(--dim)">${esc(row.status ?? row.classification)}</div>
+    </div>`).join('');
+  document.getElementById('bulk-preview').innerHTML = `
+    <div class="card" style="margin-top:12px;box-shadow:none;border-radius:10px">
+      <div style="padding:12px 14px">
+        <div style="font-size:13.5px;font-weight:700;margin-bottom:6px">Import preview</div>
+        <div style="display:flex;gap:12px;flex-wrap:wrap;font-size:12.5px;color:var(--dim)">
+          <span>Total: <b>${s.total}</b></span><span>Bookings: <b>${s.bookings}</b></span>
+          <span>Non-booking: <b>${s.nonBookings}</b></span><span>Confirm: <b>${s.confirmBookings ?? 0}</b></span>
+          <span>Duplicates: <b>${s.duplicates}</b></span><span>Invalid: <b>${s.invalid}</b></span></div>
+      </div>
+    </div>
+    <div style="margin-top:10px"><button class="btn" id="bulk-import-btn" onclick="bulkAdd()">Import ${s.bookings} bookings</button></div>`;
+}
+
+async function previewBulk() {
+  const text = document.getElementById('bulk-text').value;
+  if (!text.trim()) { toast('Paste the report first.', true); return; }
+  btnLoading('bulk-preview-btn', true);
+  try {
+    const r = await api('/import/bookings', { method: 'POST', body: JSON.stringify({ text, execute: false }) });
+    renderBulkPreview(r);
+    document.getElementById('bulk-import-btn').style.display = '';
+  } catch (e) { toast(e.message, true); }
+  btnLoading('bulk-preview-btn', false);
+}
+
 async function bulkAdd() {
-  const raw = document.getElementById('bulk-text').value.trim();
-  const prog = document.getElementById('bulk-progress');
-  if (!raw) { toast('Paste at least one guest line.', true); return; }
-  const lines = raw.split('\n').map(l => l.trim()).filter(Boolean);
-  let okCount = 0;
-  const failed = [];
-  for (let i = 0; i < lines.length; i++) {
-    const parts = lines[i].split(',').map(s => s.trim());
-    if (parts.length < 2) { failed.push(`Line ${i+1}: need at least Name and Number`); continue; }
-    const [name, phone, room, checkin, checkout] = parts;
-    const body = {
-      name: name || '',
-      phone: (phone||'').replace(/\\D/g,''),
-      room: room || null,
-      check_in: checkin || null,
-      check_out: (checkout||'') || null,
-      whatsapp_opt_in: true,
-    };
-    try {
-      await api('/guests', { method: 'POST', body: JSON.stringify(body) });
-      okCount++;
-    } catch (e) {
-      failed.push(`Line ${i+1} (${name||'?'}): ${e.message}`);
-    }
-    prog.innerHTML = `<div class="progress" style="max-width:280px"><div class="jbar-fill" style="width:${Math.round((i+1)/lines.length*100)}%"></div></div>
-      <div style="margin-top:5px">Processing ${i+1}/${lines.length}…</div>`;
-  }
-  loadGuests();
-  prog.textContent = `Done — ${okCount} added, ${failed.length} failed.`;
-  if (failed.length) toast(`${okCount} added, ${failed.length} failed. First error: ${failed[0]}`, true);
-  else celebrate(`Added ${okCount} guests — confirmations are going out`);
+  const raw = document.getElementById('bulk-text').value;
+  if (!raw.trim()) { toast('Paste the report first.', true); return; }
+  btnLoading('bulk-btn', true);
+  try {
+    const r = await api('/import/bookings', { method: 'POST', body: JSON.stringify({ text: raw, execute: true }) });
+    renderBulkResult(r);
+    celebrate('Imported ' + r.summary.bookings + ' bookings — ' + r.summary.confirmationsQueued + ' confirmations queued');
+    loadGuests();
+  } catch (e) { toast(e.message, true); }
+  btnLoading('bulk-btn', false);
+}
+
+function renderBulkResult(r) {
+  const s = r.summary;
+  const rows = (r.results ?? []).map(row => `
+    <div class="prow" style="padding:8px 14px">
+      <div style="flex:1;font-size:12.5px"><b>${esc(row.guest || '—')}</b> ${row.resNo ? '· ' + esc(row.resNo) : ''}</div>
+      <div style="font-size:12px;color:var(--dim)">${esc(row.status)}</div>
+    </div>`).join('');
+  document.getElementById('bulk-preview').innerHTML = `
+    <div class="card" style="margin-top:12px">
+      <div style="padding:14px 16px">
+        <div style="font-size:14px;font-weight:700;margin-bottom:8px">Import complete ✓</div>
+        <div style="display:flex;gap:12px;flex-wrap:wrap;font-size:12.5px;color:var(--dim)">
+          <span>${s.total} rows</span><span><b>${s.bookings}</b> bookings added</span>
+          <span>${s.nonBookings} non-booking skipped</span>
+          <span><b>${s.confirmationsQueued}</b> confirmations queued</span>
+          ${s.duplicates ? '<span>' + s.duplicates + ' duplicates skipped</span>' : ''}
+          ${s.invalid ? '<span>' + s.invalid + ' invalid</span>' : ''}</div>
+        <div style="margin-top:10px;max-height:280px;overflow-y:auto">${rows}</div>
+    </div>`;
 }
 
 async function addGuest() {

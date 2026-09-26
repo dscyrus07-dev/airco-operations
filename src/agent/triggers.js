@@ -148,25 +148,31 @@ async function maybeQueueProactive(guest, templateName, kind, triggerEvent, asOf
     return null;
   }
   const triggerReason = `${triggerEvent}:policy_ok`;
-  // Dual path: inside the 24h session window send the real rendered copy as
-  // free text; outside it, send the (override-mapped) template. template_name
-  // is stored either way so the unique constraint blocks duplicates.
-  if (sessionOpen) {
-    return queueMessage({
-      guestId: guest.id,
-      content: renderTemplateBody(templateName, vars),
-      messageType: 'free_text',
-      templateName,
-      triggerReason,
-    });
-  }
-  return queueMessage({
-    guestId: guest.id,
-    messageType: 'template',
-    templateName,
-    templateComponents: templateComponents(vars),
-    triggerReason,
-  });
+  const payload = sessionOpen
+    ? {
+        guestId: guest.id,
+        content: renderTemplateBody(templateName, vars),
+        messageType: 'free_text',
+        templateName,
+        triggerReason,
+      }
+    : {
+        guestId: guest.id,
+        messageType: 'template',
+        templateName,
+        templateComponents: templateComponents(vars),
+        triggerReason,
+      };
+  // FIX 9 (M5): the cap is enforced atomically at queue time (guest row locked
+  // FOR UPDATE) — two concurrent sends cannot both slip under the cap. The
+  // count definition is unchanged from countProactiveToday (policy_ok only).
+  const { queueProactiveCapped } = await import('../messaging/outbound.js');
+  return queueProactiveCapped(payload, cfg.proactiveDailyCap,
+    `SELECT count(*)::int AS n FROM messages
+     WHERE guest_id = $1 AND direction = 'out' AND trigger_reason LIKE '%:policy_ok'
+       AND (created_at AT TIME ZONE 'Asia/Kolkata')::date
+           = (now() AT TIME ZONE 'Asia/Kolkata')::date`,
+    [guest.id]);
 }
 
 // WhatsApp 24h session window: open if the guest messaged us in the last 24h.

@@ -29,21 +29,7 @@ app.use(
   })
 );
 
-const hits = new Map();
-function rateLimit({ max = 100, windowMs = 60_000 } = {}) {
-  return (req, res, next) => {
-    const key = req.ip ?? 'unknown';
-    const now = Date.now();
-    const rec = hits.get(key);
-    if (!rec || now - rec.start > windowMs) {
-      hits.set(key, { start: now, count: 1 });
-      return next();
-    }
-    rec.count += 1;
-    if (rec.count > max) return res.status(429).json({ error: 'rate_limited' });
-    next();
-  };
-}
+import { rateLimit } from './src/rate-limit.js';
 
 // Twilio WhatsApp inbound + status callbacks (form-encoded)
 app.post('/webhook', express.urlencoded({ extended: false, limit: '1mb' }), rateLimit(), (req, res) => {

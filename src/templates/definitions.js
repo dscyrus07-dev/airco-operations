@@ -32,8 +32,8 @@ export const TEMPLATES = [
     category: 'utility',
     body:
       'Hey {{1}}! 👋\n' +
-      "Tomorrow's the day — Mumbai mode: ON ⚡\n\n" +
-      'You\'re checking in at Zostel Mumbai tomorrow from 1:00 PM.\n' +
+      'Mumbai mode: ON ⚡\n\n' +
+      'You\'re checking in at Zostel Mumbai on {{2}} from 1:00 PM.\n' +
       '📍 Andheri East, off Military Road, Marol\n' +
       '🎒 Carry a valid photo ID.\n\n' +
       'Rooftop views, street food and a hostel full of travellers are waiting.\n' +
@@ -85,7 +85,9 @@ export function templateVariables(name, guest) {
         fmtDate(guest.check_out),
       ];
     case 'checkin_info':
-      return [guest.name];
+      // {{2}} = actual arrival date — keeps the copy timing-neutral for both
+      // the +1h-after-import trigger and the legacy day-before tick (FIX 8).
+      return [guest.name, fmtDate(guest.check_in)];
     case 'welcome':
       return [guest.name];
     case 'checkout_reminder':

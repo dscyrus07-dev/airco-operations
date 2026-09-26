@@ -19,8 +19,9 @@ import { queueMessage } from '../messaging/outbound.js';
 const IN_HOUSE_STATES = ['checked_in', 'in_stay', 'checkout_pending'];
 const JOURNEY_DONE_STATES = ['checked_out', 'review_requested', 'closed'];
 
-async function upsertGuest(parsed) {
-  const existing = await query(
+async function upsertGuest(parsed, client = null) {
+  const run = client ? (sql, params) => client.query(sql, params).then((r) => r.rows) : query;
+  const existing = await run(
     'SELECT id, journey_state FROM guests WHERE phone = $1',
     [parsed.contact_number]
   );
@@ -28,7 +29,7 @@ async function upsertGuest(parsed) {
     const g = existing[0];
     if (IN_HOUSE_STATES.includes(g.journey_state)) return g.id; // active stay untouched
     const startNewJourney = JOURNEY_DONE_STATES.includes(g.journey_state);
-    await query(
+    await run(
       `UPDATE guests SET name = COALESCE(NULLIF($2, ''), name), room = COALESCE($3, room),
          check_in = COALESCE($4, check_in), check_out = COALESCE($5, check_out),
          journey_state = ${startNewJourney ? "'booked'" : 'journey_state'},
@@ -38,7 +39,7 @@ async function upsertGuest(parsed) {
     );
     return g.id;
   }
-  const rows = await query(
+  const rows = await run(
     `INSERT INTO guests (phone, name, property, room, check_in, check_out, journey_state, whatsapp_opt_in)
      VALUES ($1, $2, 'Zostel Mumbai', $3, $4, $5, 'booked', TRUE) RETURNING id`,
     [parsed.contact_number, parsed.guest_name, parsed.room_number, parsed.arrival, parsed.departure]
@@ -110,11 +111,15 @@ export async function importBulkReport(text, { uploadedBy = 'dashboard', execute
     return { summary, results, dryRun: true };
   }
 
-  // execute: create batch + persist
+  // execute: create batch + persist. Each row runs in its OWN transaction
+  // (FIX 7): one bad row rolls back alone and is reported as failed — the
+  // rest of the paste is unaffected. Connections are released between rows
+  // so overlapping imports cannot starve the pool (max 5).
   const batch = (await query(
     `INSERT INTO import_batches (uploaded_by, row_count) VALUES ($1, $2) RETURNING id, imported_at`,
     [uploadedBy, rows.length]
   ))[0];
+  const { getPool } = await import('../db.js');
 
   for (const row of rows) {
     const dup = row.parsed?.reservation_number && existing.has(row.parsed.reservation_number);
@@ -130,52 +135,82 @@ export async function importBulkReport(text, { uploadedBy = 'dashboard', execute
       results.push({ guest: row.raw[3] ?? row.raw[0] ?? '', status: `invalid: ${row.error}`, classification: 'INVALID' });
       continue;
     }
-    summary.bookings++;
-    if (row.resType === 'CONFIRM_BOOKING') summary.confirmBookings++;
     if (dup) {
       summary.duplicates++;
       results.push({ guest: row.parsed.guest_name, resNo: row.parsed.reservation_number, status: 'already imported — skipped', classification: 'DUPLICATE' });
       continue;
     }
 
-    const guestId = await upsertGuest(row.parsed);
-    await insertBookingRow(row, guestId, batch.id, 'BOOKING', { withSchedule: true });
-
-    let confirmationStatus = `not_confirm_booking (${row.resType})`;
-    if (row.resType === 'CONFIRM_BOOKING') {
-      summary.confirmationsQueued++;
-      await queueConfirmation(guestId, row.parsed);
-      confirmationStatus = 'queued';
+    const client = await getPool().connect();
+    try {
+      await client.query('BEGIN');
+      const guestId = await upsertGuest(row.parsed, client);
+      const inserted = await insertBookingRow(row, guestId, batch.id, 'BOOKING', { withSchedule: true }, client);
+      if (!inserted.length) {
+        // FIX 10: same reservation twice in ONE paste — the second insert is a
+        // no-op; classify it as a duplicate, not a successful import.
+        await client.query('ROLLBACK');
+        summary.duplicates++;
+        results.push({ guest: row.parsed.guest_name, resNo: row.parsed.reservation_number, status: 'duplicate in this paste — skipped', classification: 'DUPLICATE' });
+        continue;
+      }
+      let confirmationQueued = false;
+      if (row.resType === 'CONFIRM_BOOKING') {
+        await queueConfirmation(guestId, row.parsed, client);
+        confirmationQueued = true;
+      }
+      await client.query('COMMIT');
+      summary.bookings++;
+      if (row.resType === 'CONFIRM_BOOKING') {
+        summary.confirmBookings++;
+        summary.confirmationsQueued++;
+      }
+      results.push({
+        guest: row.parsed.guest_name,
+        resNo: row.parsed.reservation_number,
+        phone: '+' + row.parsed.contact_number,
+        room: row.parsed.room_number,
+        status: `booking added${confirmationQueued ? ' · confirmation queued' : ''}`,
+        classification: 'BOOKING',
+      });
+    } catch (err) {
+      await client.query('ROLLBACK').catch(() => {});
+      summary.failed = (summary.failed ?? 0) + 1;
+      results.push({
+        guest: row.parsed?.guest_name ?? row.raw[3] ?? '',
+        resNo: row.parsed?.reservation_number,
+        status: `import failed: ${String(err.message).slice(0, 200)}`,
+        classification: 'FAILED',
+      });
+      console.error(`[import] row failed and rolled back: ${err.message}`);
+    } finally {
+      client.release();
     }
-    results.push({
-      guest: row.parsed.guest_name,
-      resNo: row.parsed.reservation_number,
-      phone: '+' + row.parsed.contact_number,
-      room: row.parsed.room_number,
-      status: `booking added${row.resType === 'CONFIRM_BOOKING' ? ' · confirmation queued' : ''}`,
-      classification: 'BOOKING',
-    });
   }
 
   await query(
-    `UPDATE import_batches SET booking_count=$1, non_booking_count=$2, invalid_count=$3, duplicate_count=$4 WHERE id=$5`,
-    [summary.bookings, summary.nonBookings, summary.invalid, summary.duplicates, batch.id]
+    `UPDATE import_batches SET booking_count=$1, non_booking_count=$2, invalid_count=$3, duplicate_count=$4, failed_count=$5 WHERE id=$6`,
+    [summary.bookings, summary.nonBookings, summary.invalid, summary.duplicates, summary.failed ?? 0, batch.id]
   );
   return { batchId: batch.id, importedAt: batch.imported_at, summary, results };
 }
 
-async function insertBookingRow(row, guestId, batchId, classification, opts = {}) {
+// Returns the inserted booking row, or [] when the reservation already exists
+// (ON CONFLICT DO NOTHING) — used to classify in-paste duplicates (FIX 10).
+async function insertBookingRow(row, guestId, batchId, classification, opts = {}, client = null) {
+  const run = client ? (sql, params) => client.query(sql, params).then((r) => r.rows) : query;
   const p = row.parsed ?? {};
   const preArrivalDue = opts.withSchedule ? new Date(Date.now() + 3600_000) : null;
   const checkoutDue = opts.withSchedule && p.departure ? istDateAt1300(p.departure) : null;
-  await query(
+  return run(
     `INSERT INTO bookings (reservation_number, guest_id, emp_name, contact_number, guest_name,
        room_number, rate, arrival, departure, nights, pax, reservation_type,
        deposit, balance_due, business_source, cash, card, upi, nos,
        raw_row, batch_id, classification, pre_arrival_due_at, checkout_reminder_due_at)
      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24)
      ON CONFLICT (reservation_number) WHERE reservation_number IS NOT NULL AND reservation_number <> ''
-     DO NOTHING`,
+     DO NOTHING
+     RETURNING id`,
     [p.reservation_number ?? null, guestId, p.emp_name, p.contact_number, p.guest_name,
      p.room_number, p.rate, p.arrival, p.departure, p.nights, p.pax, p.reservation_type,
      p.deposit, p.balance_due, p.business_source, p.cash, p.card, p.upi, p.nos,
@@ -190,8 +225,7 @@ function istDateAt1300(departure) {
   return new Date(Date.UTC(y, m - 1, day, 7, 30)); // 13:00 IST == 07:30 UTC
 }
 
-async function queueConfirmation(guestId, parsed) {
-  const { queueMessage } = await import('../messaging/outbound.js');
+async function queueConfirmation(guestId, parsed, client = null) {
   const { buildTemplateVars } = await import('../templates/store.js');
   const guest = {
     id: guestId,
@@ -203,13 +237,14 @@ async function queueConfirmation(guestId, parsed) {
   const vars = await buildTemplateVars('booking_confirmation', guest);
   // NOTE (FIX 2): journey_state / stay dates are managed by upsertGuest only —
   // the confirmation must never regress an in-house guest's state.
+  // FIX 7: the message insert joins the row's transaction via `client`.
   await queueMessage({
     guestId,
     messageType: 'template',
     templateName: 'booking_confirmation',
     templateComponents: [{ type: 'body', parameters: vars.map((text) => ({ type: 'text', text: String(text ?? '') })) }],
     triggerReason: 'bulk_import:booking_created',
-  });
+  }, client);
 }
 
 // YYYY-MM-DD in Asia/Kolkata — lexicographic date comparison for sanity gates.
@@ -270,18 +305,29 @@ export async function runJourneyScheduler() {
       continue;
     }
     const { buildTemplateVars } = await import('../templates/store.js');
+    const { queueProactiveCapped } = await import('../messaging/outbound.js');
     const vars = await buildTemplateVars('checkin_info', {
       name: b.g_name,
       check_in: b.arrival?.toISOString?.().slice(0, 10),
       check_out: b.departure?.toISOString?.().slice(0, 10),
     });
-    await queueMessage({
+    // FIX 9: cap enforced atomically at queue time; null ⇒ cap was reached.
+    const queued = await queueProactiveCapped({
       guestId: b.guest_id,
       messageType: 'template',
       templateName: 'checkin_info',
       templateComponents: [{ type: 'body', parameters: vars.map((text) => ({ type: 'text', text: String(text ?? '') })) }],
       triggerReason: `bulk_import:pre_arrival:${b.id}`,
-    });
+    }, getConfig().proactiveDailyCap,
+      `SELECT count(*)::int AS n FROM messages
+       WHERE guest_id = $1 AND direction = 'out' AND message_type = 'template'
+         AND (created_at AT TIME ZONE 'Asia/Kolkata')::date
+             = (now() AT TIME ZONE 'Asia/Kolkata')::date`,
+      [b.guest_id]);
+    if (!queued) {
+      await query(`UPDATE bookings SET pre_arrival_sent_at = now(), pre_arrival_status = 'skipped_daily_cap' WHERE id = $1`, [b.id]);
+      continue;
+    }
     await query(`UPDATE bookings SET pre_arrival_sent_at = now(), pre_arrival_status = 'sent' WHERE id = $1`, [b.id]);
   }
 
@@ -328,14 +374,25 @@ export async function runJourneyScheduler() {
       continue;
     }
     const { buildTemplateVars } = await import('../templates/store.js');
+    const { queueProactiveCapped } = await import('../messaging/outbound.js');
     const vars = await buildTemplateVars('checkout_reminder', { name: b.g_name });
-    await queueMessage({
+    // FIX 9: cap enforced atomically at queue time; null ⇒ cap was reached.
+    const queued = await queueProactiveCapped({
       guestId: b.guest_id,
       messageType: 'template',
       templateName: 'checkout_reminder',
       templateComponents: [{ type: 'body', parameters: vars.map((text) => ({ type: 'text', text: String(text ?? '') })) }],
       triggerReason: `bulk_import:checkout_reminder:${b.id}`,
-    });
+    }, getConfig().proactiveDailyCap,
+      `SELECT count(*)::int AS n FROM messages
+       WHERE guest_id = $1 AND direction = 'out' AND message_type = 'template'
+         AND (created_at AT TIME ZONE 'Asia/Kolkata')::date
+             = (now() AT TIME ZONE 'Asia/Kolkata')::date`,
+      [b.guest_id]);
+    if (!queued) {
+      await query(`UPDATE bookings SET checkout_reminder_sent_at = now(), checkout_reminder_status = 'skipped_daily_cap' WHERE id = $1`, [b.id]);
+      continue;
+    }
     // FIX 5: the surviving trigger owns the checkout_pending transition that
     // the retired legacy tick used to perform.
     if (['checked_in', 'in_stay'].includes(b.journey_state)) {

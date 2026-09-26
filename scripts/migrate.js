@@ -12,7 +12,10 @@ async function main() {
     console.error('DATABASE_URL not set');
     process.exit(1);
   }
-  const client = new pg.Client({ connectionString: process.env.DATABASE_URL });
+  const client = new pg.Client({
+    connectionString: process.env.DATABASE_URL,
+    ...(await import('../src/db.js')).resolveSsl(),
+  });
   await client.connect();
   try {
     await client.query(`CREATE TABLE IF NOT EXISTS schema_migrations (

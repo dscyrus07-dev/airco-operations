@@ -11,21 +11,32 @@ const CLAIM_STALE_MINUTES = 5;
 
 let dispatching = false;
 
-export async function queueMessage({
-  guestId,
-  content = null,
-  messageType,
-  templateName = null,
-  templateComponents = [],
-  triggerReason,
-}) {
+// Shared insert builder for queueMessage / queueProactiveCapped (FIX 9).
+function messageInsert(payload) {
+  return {
+    sql: `INSERT INTO messages (guest_id, direction, content, message_type, template_name, template_components, status, trigger_reason)
+          VALUES ($1, 'out', $2, $3, $4, $5::jsonb, 'queued', $6)
+          RETURNING *`,
+    params: [payload.guestId, payload.content, payload.messageType, payload.templateName,
+      JSON.stringify(payload.templateComponents ?? []), payload.triggerReason],
+  };
+}
+
+export async function queueMessage(
+  {
+    guestId,
+    content = null,
+    messageType,
+    templateName = null,
+    templateComponents = [],
+    triggerReason,
+  },
+  client = null // optional transaction client (FIX 7) — pool by default
+) {
+  const run = client ? (sql, params) => client.query(sql, params).then((r) => r.rows) : query;
+  const { sql, params } = messageInsert({ guestId, content, messageType, templateName, templateComponents, triggerReason });
   try {
-    const rows = await query(
-      `INSERT INTO messages (guest_id, direction, content, message_type, template_name, template_components, status, trigger_reason)
-       VALUES ($1, 'out', $2, $3, $4, $5::jsonb, 'queued', $6)
-       RETURNING *`,
-      [guestId, content, messageType, templateName, JSON.stringify(templateComponents), triggerReason]
-    );
+    const rows = await run(sql, params);
     return rows[0];
   } catch (err) {
     if (err.code === '23505') {
@@ -33,6 +44,36 @@ export async function queueMessage({
       return null;
     }
     throw err;
+  }
+}
+
+// FIX 9 (M5): atomic daily-cap queueing. A bare INSERT..SELECT WHERE count<cap
+// is still racy under READ COMMITTED (concurrent statements snapshot before
+// either commits), so the guest row is locked FOR UPDATE inside a transaction
+// — concurrent sends for the SAME guest serialize; different guests never
+// contend. The caller supplies its own count definition (legacy path counts
+// policy_ok messages; the bookings scheduler counts all outbound templates).
+export async function queueProactiveCapped(payload, cap, countSql, countParams) {
+  const { getPool } = await import('../db.js');
+  const client = await getPool().connect();
+  try {
+    await client.query('BEGIN');
+    await client.query('SELECT id FROM guests WHERE id = $1 FOR UPDATE', [payload.guestId]);
+    const cnt = await client.query(countSql, countParams);
+    if (cnt.rows[0].n >= cap) {
+      await client.query('COMMIT');
+      return null; // cap reached — suppressed
+    }
+    const { sql, params } = messageInsert(payload);
+    const res = await client.query(sql, params);
+    await client.query('COMMIT');
+    return res.rows[0];
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => {});
+    if (err.code === '23505') return null;
+    throw err;
+  } finally {
+    client.release();
   }
 }
 

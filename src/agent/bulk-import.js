@@ -4,6 +4,29 @@
 import { query } from '../db.js';
 import { getConfig } from '../config.js';
 import { parseBulkReport } from './bulk-parse.js';
+
+// Upsert a guest profile by normalized phone — one guest, many reservations.
+async function upsertGuest(parsed) {
+  const existing = await query('SELECT id FROM guests WHERE phone = $1', [parsed.contact_number]);
+  if (existing.length > 0) {
+    await query(
+      `UPDATE guests SET name = COALESCE(NULLIF($2, ''), name), room = COALESCE($3, room),
+         check_in = COALESCE($4, check_in), check_out = COALESCE($5, check_out),
+         journey_state = CASE WHEN journey_state = 'closed' THEN journey_state ELSE 'booked' END,
+         archived = FALSE
+       WHERE id = $1 RETURNING id`,
+      [existing[0].id, parsed.guest_name, parsed.room_number, parsed.arrival, parsed.departure]
+    );
+    return existing[0].id;
+  }
+  const rows = await query(
+    `INSERT INTO guests (phone, name, property, room, check_in, check_out, journey_state, whatsapp_opt_in)
+     VALUES ($1, $2, 'Zostel Mumbai', $3, $4, $5, 'booked', TRUE) RETURNING id`,
+    [phone, parsed.guest_name, parsed.room_number, parsed.arrival, parsed.departure]
+  );
+  return rows[0].id;
+}
+
 export async function importBulkReport(text, { uploadedBy = 'dashboard', execute = false } = {}) {
   const { rows } = parseBulkReport(text);
 

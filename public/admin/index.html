@@ -1751,7 +1751,7 @@ function renderActivityList() {
           <button class="btn ghost small" onclick="toggleMenu(event, ${a.id})" title="Actions">⋯</button>
           <div class="menu" id="menu-${a.id}" style="display:none">
             ${(!a.sent_at && a.status !== 'cancelled') ? `<button onclick="editActivity(${a.id})">✏️ Edit</button>` : ''}
-            ${(!a.sent_at && a.status !== 'active') ? `<button onclick="sendActivityNow(${a.id})">📤 Send now</button>` : ''}
+            ${a.status !== 'cancelled' ? `<button onclick="sendActivityNow(${a.id})">${a.sent_at ? '📤 Send to new guests' : '📤 Send now'}</button>` : ''}
             ${(!a.sent_at && a.status !== 'cancelled') ? `<button onclick="duplicateActivity(${a.id})">📄 Duplicate</button>` : ''}
             ${(!a.sent_at && a.status !== 'cancelled') ? `<button onclick="cancelActivity(${a.id})">🚫 Cancel</button>` : ''}
             ${!a.sent_at ? `<div class="sep"></div><button class="danger" onclick="deleteActivity(${a.id})">🗑 Delete</button>` : ''}
@@ -1829,11 +1829,20 @@ async function scheduleActivity() {
 }
 
 async function sendActivityNow(id) {
-  const ok = await confirmDialog({ title: 'Send this activity now?', message: 'It will be offered to every in-house guest, subject to policy.', confirmText: 'Send now' });
+  const a = (activitiesCache ?? []).find(x => x.id === id);
+  const resending = Boolean(a?.sent_at);
+  const ok = await confirmDialog({
+    title: resending ? 'Send to new guests?' : 'Send this activity now?',
+    message: resending
+      ? 'Only guests who have NOT already received this activity will get it (new check-ins). Policy still applies.'
+      : 'It will be offered to every in-house guest, subject to policy.',
+    confirmText: resending ? 'Send to new guests' : 'Send now',
+  });
   if (!ok) return;
   try {
     const r = await api('/activities/' + id + '/send', { method: 'POST' });
-    celebrate(`Activity sent to ${r.reached} guest${r.reached===1?'':'s'}`);
+    if (r.reached === 0) toast('No new guests to send to — everyone in-house already received it.');
+    else celebrate(`Activity sent to ${r.reached} guest${r.reached===1?'':'s'}${resending ? ' (new)' : ''}`);
   } catch (e) { toast(e.message, true); }
   loadActivities();
 }

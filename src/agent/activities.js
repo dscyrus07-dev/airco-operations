@@ -47,6 +47,8 @@ function cleanFields({ date, time, eventName, description }) {
 // Offer one activity to every in-property guest through the policy engine.
 // Nobody is messaged directly — every send is queued with a trigger reason
 // and is auditable. Used by both create-and-send and send-later.
+// Per-activity idempotency: guests who already received THIS activity are
+// excluded, so re-sending reaches only guests who checked in since.
 async function broadcast(activity) {
   const cfg = getConfig();
   const guests = await query(
@@ -55,7 +57,14 @@ async function broadcast(activity) {
      WHERE journey_state = ANY($1) AND archived = FALSE`,
     [IN_PROPERTY_STATES]
   );
-  if (guests.length === 0) return { queued: [], suppressed: [] };
+  const prior = new Set((await query(
+    `SELECT DISTINCT guest_id FROM messages
+     WHERE trigger_reason = $1
+       AND status IN ('queued','sending','sent','delivered','read')`,
+    [`activity:${activity.id}:policy_ok`]
+  )).map((r) => r.guest_id));
+  const audience = guests.filter((g) => !prior.has(g.id));
+  if (audience.length === 0) return { queued: [], suppressed: [] };
 
   // Batch the per-guest policy inputs into two queries instead of 2N
   // round trips — the broadcast stays fast at 30+ guests.
@@ -84,7 +93,7 @@ async function broadcast(activity) {
 
   const queued = [];
   const suppressed = [];
-  for (const g of guests) {
+  for (const g of audience) {
     const decision = canSendProactive({
       guest: g,
       proactiveSentToday: sentMap.get(g.id) ?? 0,
@@ -133,6 +142,8 @@ export async function createAndBroadcastActivity({ date, time, eventName, descri
 }
 
 // Run the policy-gated broadcast for a stored activity and mark it sent.
+// Re-sends are allowed and idempotent per guest: only guests who have NOT
+// already received this activity are messaged (new check-ins get it too).
 export async function broadcastActivityById(id) {
   const rows = await query(
     `SELECT id, to_char(date, 'YYYY-MM-DD') AS date, time, event_name, description, status, sent_at
@@ -141,11 +152,11 @@ export async function broadcastActivityById(id) {
   );
   if (rows.length === 0) throw new Error('activity not found');
   const activity = rows[0];
-  if (activity.sent_at) throw new Error('activity was already sent');
 
   const { queued, suppressed } = await broadcast(activity);
   await dispatchPending();
-  await query(`UPDATE activities SET status = 'active', sent_at = now() WHERE id = $1`, [id]);
+  // sent_at marks the FIRST send; re-sends don't move it.
+  await query(`UPDATE activities SET status = 'active', sent_at = COALESCE(sent_at, now()) WHERE id = $1`, [id]);
   return {
     reached: queued.length,
     suppressed,

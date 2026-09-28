@@ -1750,7 +1750,7 @@ function renderActivityList() {
         <div class="menu-wrap">
           <button class="btn ghost small" onclick="toggleMenu(event, ${a.id})" title="Actions">⋯</button>
           <div class="menu" id="menu-${a.id}" style="display:none">
-            ${(!a.sent_at && a.status !== 'cancelled') ? `<button onclick="editActivity(${a.id})">✏️ Edit</button>` : ''}
+            ${a.status !== 'cancelled' ? `<button onclick="editActivity(${a.id})">✏️ Edit</button>` : ''}
             ${a.status !== 'cancelled' ? `<button onclick="sendActivityNow(${a.id})">${a.sent_at ? '📤 Send to new guests' : '📤 Send now'}</button>` : ''}
             ${(!a.sent_at && a.status !== 'cancelled') ? `<button onclick="duplicateActivity(${a.id})">📄 Duplicate</button>` : ''}
             ${(!a.sent_at && a.status !== 'cancelled') ? `<button onclick="cancelActivity(${a.id})">🚫 Cancel</button>` : ''}

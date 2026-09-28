@@ -12,6 +12,30 @@ function istToday() {
 }
 
 // Deterministic activity rendering — engaging but never LLM-generated (Phase 1).
+import crypto from 'node:crypto';
+
+// Template variables for the approved activity_notice template — must match
+// its Meta-approved body order: {{1}} event, {{2}} date, {{3}} time, {{4}} place.
+function activityVars(a, property) {
+  const date = new Date(`${a.date}T12:00:00Z`).toLocaleDateString('en-IN', {
+    weekday: 'long',
+    day: 'numeric',
+    month: 'short',
+  });
+  return [a.event_name, date, a.time, a.description || property];
+}
+
+// Content hash — the same activity content never re-sends to a guest who
+// already received it; editing the content or dates produces a new hash and
+// becomes sendable again.
+function activityContentHash(a) {
+  return crypto.createHash('sha256')
+    .update(`${a.event_name}|${a.date}|${a.time}|${a.description ?? ''}`)
+    .digest('hex')
+    .slice(0, 12);
+}
+
+// Deterministic activity rendering — engaging but never LLM-generated (Phase 1).
 function formatMessage(a, property) {
   const date = new Date(`${a.date}T12:00:00Z`).toLocaleDateString('en-IN', {
     weekday: 'long',
@@ -47,8 +71,11 @@ function cleanFields({ date, time, eventName, description }) {
 // Offer one activity to every in-property guest through the policy engine.
 // Nobody is messaged directly — every send is queued with a trigger reason
 // and is auditable. Used by both create-and-send and send-later.
-// Per-activity idempotency: guests who already received THIS activity are
-// excluded, so re-sending reaches only guests who checked in since.
+// Per-CONTENT idempotency: the trigger reason carries a hash of the activity
+// content, so the same message never sends twice, but editing the content
+// (or dates) makes it sendable again. Guests who already received THIS
+// exact version are excluded; the send goes out as an APPROVED TEMPLATE
+// (activity_notice) so it reaches in-house guests without a 24h session.
 async function broadcast(activity) {
   const cfg = getConfig();
   const guests = await query(
@@ -57,17 +84,16 @@ async function broadcast(activity) {
      WHERE journey_state = ANY($1) AND archived = FALSE`,
     [IN_PROPERTY_STATES]
   );
+  const contentHash = activityContentHash(activity);
+  const triggerReason = `activity:${activity.id}:${contentHash}:policy_ok`;
   const prior = new Set((await query(
     `SELECT DISTINCT guest_id FROM messages
      WHERE trigger_reason = $1
        AND status IN ('queued','sending','sent','delivered','read')`,
-    [`activity:${activity.id}:policy_ok`]
+    [triggerReason]
   )).map((r) => r.guest_id));
   const audience = guests.filter((g) => !prior.has(g.id));
   if (audience.length === 0) return { queued: [], suppressed: [] };
-
-  // Batch the per-guest policy inputs into two queries instead of 2N
-  // round trips — the broadcast stays fast at 30+ guests.
   const ids = guests.map((g) => g.id);
   const [sentRows, reqRows] = await Promise.all([
     query(
@@ -108,9 +134,14 @@ async function broadcast(activity) {
     }
     const msg = await queueMessage({
       guestId: g.id,
-      content: formatMessage(activity, cfg.property),
-      messageType: 'free_text',
-      triggerReason: `activity:${activity.id}:policy_ok`,
+      content: formatMessage(activity, cfg.property), // free-text fallback copy
+      messageType: 'template',
+      templateName: 'activity_notice',
+      templateComponents: [{
+        type: 'body',
+        parameters: activityVars(activity, cfg.property).map((text) => ({ type: 'text', text: String(text ?? '') })),
+      }],
+      triggerReason,
     });
     if (msg) queued.push({ guestId: g.id, name: g.name });
   }
@@ -167,7 +198,9 @@ export async function broadcastActivityById(id) {
 export async function updateActivity(id, { date, time, eventName, description, status }) {
   const existing = await query('SELECT id, sent_at, status FROM activities WHERE id = $1', [id]);
   if (existing.length === 0) throw new Error('activity not found');
-  if (existing[0].sent_at) throw new Error('sent activities cannot be edited');
+  // Sent activities CAN be edited: the content hash changes, so a re-send
+  // treats it as a new version and reaches everyone again (per-guest dedupe
+  // still prevents the identical content from sending twice).
 
   const updates = {};
   if (date !== undefined) {

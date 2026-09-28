@@ -17,6 +17,8 @@ const MIGRATIONS_DIR = path.join(
   'migrations'
 );
 
+let migrationsDone = false;
+
 export async function withDb(fn) {
   const pool = new pg.Pool({ connectionString: TEST_DB_URL, max: 5 });
   try {
@@ -26,10 +28,29 @@ export async function withDb(fn) {
     return { skipped: true, reason: `test DB unavailable (${err.code ?? err.message})` };
   }
   try {
-    // apply migrations in filename order (idempotent IF NOT EXISTS)
-    const files = readdirSync(MIGRATIONS_DIR).filter((f) => f.endsWith('.sql')).sort();
-    for (const f of files) {
-      await pool.query(readFileSync(path.join(MIGRATIONS_DIR, f), 'utf8'));
+    // apply migrations once per process (they are NOT re-runnable against
+    // data — e.g. 001 re-creates a unique index that later-test rows can
+    // legitimately violate)
+    if (!migrationsDone) {
+      // the blanket guest+template unique index was intentionally dropped in
+      // production (manual resends) — drop it here too so re-running 001
+      // against leftover test data can't fail on duplicate rows
+      await pool.query('DROP INDEX IF EXISTS uniq_messages_guest_template');
+      // clear leftover data so 001's unique index can be re-created cleanly
+      await pool.query(`
+        DO $$
+        BEGIN
+          IF to_regclass('public.guests') IS NOT NULL THEN
+            TRUNCATE messages, journey_events, bookings, import_batches, requests,
+              activities, template_settings, app_settings, guests RESTART IDENTITY CASCADE;
+          END IF;
+        END $$;`)
+        .catch(() => {});
+      const files = readdirSync(MIGRATIONS_DIR).filter((f) => f.endsWith('.sql')).sort();
+      for (const f of files) {
+        await pool.query(readFileSync(path.join(MIGRATIONS_DIR, f), 'utf8'));
+      }
+      migrationsDone = true;
     }
     const result = await fn(pool);
     return { skipped: false, result };

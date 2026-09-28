@@ -40,6 +40,17 @@ export const TEMPLATES = [
       'Got an arrival question? Drop it right here.',
   },
   {
+    name: 'activity_notice',
+    category: 'utility',
+    body:
+      '👀 Happening at Zostel Mumbai!\n\n' +
+      '{{1}}\n' +
+      '📅 {{2}}\n' +
+      '🕘 {{3}}\n' +
+      '📍 {{4}}\n\n' +
+      'Come meet the hostel gang — see you there ✌️',
+  },
+  {
     name: 'welcome',
     category: 'utility',
     body:

@@ -91,8 +91,7 @@ test('FIX 2 #4: re-import of the SAME reservation → duplicate skipped, no stat
   if (r.skipped) t.skip(r.reason);
 });
 
-test('FIX 2 #5: checkout hands guest row over to a future reservation', async (t) => {
-  const r = await withDb(async (pool) => {
+test('FIX 2 #5: checkout hands guest row over to a future reservation', async (t) => {  const r = await withDb(async (pool) => {
     await cleanTables(pool);
     const g = await insertGuest(pool, { phone: '919100000005', name: 'Handover', state: 'checked_out', checkIn: istDate(-2), checkOut: istDate(-1) });
     await insertBooking(pool, { guestId: g.id, resNo: 'ZM900005', arrival: `${istDate(2)} 13:00`, departure: `${istDate(3)} 10:00`, room: '505' });
@@ -104,6 +103,29 @@ test('FIX 2 #5: checkout hands guest row over to a future reservation', async (t
     assert.equal(istOf(guest.check_out), istDate(3));
     const ev = (await pool.query(`SELECT event FROM journey_events WHERE guest_id = $1`, [g.id])).rows[0];
     assert.equal(ev.event, 'future_booking_handover');
+    return true;
+  });
+  if (r.skipped) t.skip(r.reason);
+});
+
+test('archived guest + re-import of their reservation → restored, no duplicate confirmation', async (t) => {
+  const r = await withDb(async (pool) => {
+    await cleanTables(pool);
+    const text = REPORT('Nidhi Purohit', '919700000099', 'ZM970001', '204-3', `${dmy(istDate(1))} 13.00`, `${dmy(istDate(2))} 10.00`);
+    await importBulkReport(text, { execute: true });
+    // staff deletes the guest (archived)
+    await pool.query('UPDATE guests SET archived = TRUE');
+    const msgCount1 = (await pool.query('SELECT count(*)::int AS n FROM messages')).rows[0].n;
+    // the same reservation re-syncs from the sheet
+    const out = await importBulkReport(text, { execute: true });
+    assert.equal(out.summary.duplicates, 1, 'reservation deduped');
+    assert.equal(out.summary.confirmationsQueued, 0, 'no duplicate confirmation');
+    const guest = (await pool.query('SELECT name, journey_state, archived FROM guests')).rows[0];
+    assert.equal(guest.archived, false, 'guest restored');
+    assert.equal(guest.name, 'Nidhi Purohit');
+    assert.equal(guest.journey_state, 'booked');
+    const msgCount2 = (await pool.query('SELECT count(*)::int AS n FROM messages')).rows[0].n;
+    assert.equal(msgCount2, msgCount1, 'message count unchanged');
     return true;
   });
   if (r.skipped) t.skip(r.reason);

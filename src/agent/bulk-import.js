@@ -22,13 +22,17 @@ const JOURNEY_DONE_STATES = ['checked_out', 'review_requested', 'closed'];
 async function upsertGuest(parsed, client = null) {
   const run = client ? (sql, params) => client.query(sql, params).then((r) => r.rows) : query;
   const existing = await run(
-    'SELECT id, journey_state FROM guests WHERE phone = $1',
+    'SELECT id, journey_state, archived FROM guests WHERE phone = $1',
     [parsed.contact_number]
   );
   if (existing.length > 0) {
     const g = existing[0];
-    if (IN_HOUSE_STATES.includes(g.journey_state)) return g.id; // active stay untouched
-    const startNewJourney = JOURNEY_DONE_STATES.includes(g.journey_state);
+    // A deleted (archived) guest re-appearing in an import is a fresh booking
+    // for that person — restore them. The in-house protection only applies
+    // to LIVE guests (an archived guest has no active journey from the
+    // operator's perspective).
+    if (!g.archived && IN_HOUSE_STATES.includes(g.journey_state)) return g.id; // active stay untouched
+    const startNewJourney = g.archived || JOURNEY_DONE_STATES.includes(g.journey_state);
     await run(
       `UPDATE guests SET name = COALESCE(NULLIF($2, ''), name), room = COALESCE($3, room),
          check_in = COALESCE($4, check_in), check_out = COALESCE($5, check_out),
@@ -137,6 +141,9 @@ export async function importBulkReport(text, { uploadedBy = 'dashboard', execute
     }
     if (dup) {
       summary.duplicates++;
+      // The reservation exists — no duplicate confirmation. But if its guest
+      // was archived (deleted from the dashboard), a re-import restores them.
+      await upsertGuest(row.parsed);
       results.push({ guest: row.parsed.guest_name, resNo: row.parsed.reservation_number, status: 'already imported — skipped', classification: 'DUPLICATE' });
       continue;
     }

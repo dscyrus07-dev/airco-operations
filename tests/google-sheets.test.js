@@ -54,7 +54,6 @@ test('rowsToTsv converts sheet rows into parser-ready tab-separated text', () =>
 // Real-world sheet shape: title + subtitle + empty row + header at line 4 +
 // data. The parser must find the header row, skip the preamble, and use tabs.
 test('parser handles the real sheet layout (title rows before the header)', () => {
-  const { parseBulkReport } = await_import_parser();
   const tsv = [
     'ZOSTEL MUMBAI  |  RESERVATION & PAYMENT REPORT',
     'Hotel Operations • Paste hotel report rows from row 5 • Nights and Balance Due calculate automatically',

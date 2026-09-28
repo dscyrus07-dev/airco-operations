@@ -77,8 +77,10 @@ async function broadcast(activity) {
       [ids]
     ),
   ]);
-  const sentMap = new Map(sentRows.rows.map((r) => [r.guest_id, r.n]));
-  const openReqMap = new Map(reqRows.rows.map((r) => [r.guest_id, r.n]));
+  // query() already returns rows — `.rows` here was undefined and crashed
+  // every broadcast with "Cannot read properties of undefined (reading 'map')".
+  const sentMap = new Map(sentRows.map((r) => [r.guest_id, r.n]));
+  const openReqMap = new Map(reqRows.map((r) => [r.guest_id, r.n]));
 
   const queued = [];
   const suppressed = [];

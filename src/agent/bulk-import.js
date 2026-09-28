@@ -129,7 +129,12 @@ export async function importBulkReport(text, { uploadedBy = 'dashboard', execute
     const dup = row.parsed?.reservation_number && existing.has(row.parsed.reservation_number);
     if (row.classification === 'NON_BOOKING') {
       summary.nonBookings++;
-      await insertBookingRow(row, null, batch.id, 'NON_BOOKING');
+      // store only rows with SOME identity (guest name or reservation) —
+      // sheet decoration (titles, subtitles) is skipped entirely so the
+      // 15-minute sync doesn't accumulate duplicate junk rows
+      const hasIdentity = (row.parsed?.guest_name ?? row.raw[3] ?? '').trim()
+        || (row.parsed?.reservation_number ?? row.raw[1] ?? '').trim();
+      if (hasIdentity) await insertBookingRow(row, null, batch.id, 'NON_BOOKING');
       results.push({ guest: row.raw[3] ?? '', status: 'non-booking row — skipped', classification: 'NON_BOOKING' });
       continue;
     }

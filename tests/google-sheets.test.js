@@ -19,6 +19,7 @@ process.env.GOOGLE_OAUTH_REFRESH_TOKEN ??= 'test-refresh-token';
 
 const { withDb, cleanTables } = await import('./db-helper.js');
 const gs = await import('../src/integrations/google-sheets.js');
+const { parseBulkReport } = await import('../src/agent/bulk-parse.js');
 
 test('redirectUri is the exact production callback', () => {
   assert.equal(gs.redirectUri('https://airco-operations-production.up.railway.app/'),
@@ -48,6 +49,28 @@ test('rowsToTsv converts sheet rows into parser-ready tab-separated text', () =>
   assert.equal(tsv.split('\n').length, 3);
   assert.match(tsv.split('\n')[1], /^Sumit\tZM1\t8103370439\tVedank Agrawal\t305$/);
   assert.ok(!tsv.includes('\t\t\t\t\n'), 'no stray tab runs from null cells');
+});
+
+// Real-world sheet shape: title + subtitle + empty row + header at line 4 +
+// data. The parser must find the header row, skip the preamble, and use tabs.
+test('parser handles the real sheet layout (title rows before the header)', () => {
+  const { parseBulkReport } = await_import_parser();
+  const tsv = [
+    'ZOSTEL MUMBAI  |  RESERVATION & PAYMENT REPORT',
+    'Hotel Operations • Paste hotel report rows from row 5 • Nights and Balance Due calculate automatically',
+    ['Emp name', 'Res. No', 'Contact Number', 'Guest', 'Room No.', 'Rate(Rs)', 'Arrival', 'Departure', 'Nights', 'Pax', 'Res.Type', 'Deposit(Rs)', 'Balance Due(Rs)', 'Business Source'].join('\t'),
+    ['shahvez', 'ZM1352311', '8855994761', 'Manish Sharma', '103-1', '1,318.99', '28-09-2026 13:00', '01-10-2026 10:00', '3', '1 / 0', 'Confirm Booking', '4,154.85', '0.00', 'Makemytrip'].join('\t'),
+  ].join('\n');
+  const parsed = parseBulkReport(tsv);
+  assert.ok(parsed.headers, 'header row detected below the preamble');
+  assert.equal(parsed.rows.length, 1);
+  const row = parsed.rows[0];
+  assert.equal(row.classification, 'BOOKING');
+  assert.equal(row.parsed.guest_name, 'Manish Sharma');
+  assert.equal(row.parsed.reservation_number, 'ZM1352311');
+  assert.equal(row.parsed.contact_number, '918855994761');
+  assert.equal(row.resType, 'CONFIRM_BOOKING');
+  assert.equal(row.parsed.room_number, '103-1');
 });
 
 test('syncNow feeds fetched rows into the EXISTING importer (fetch stubbed)', async (t) => {

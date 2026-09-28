@@ -103,12 +103,18 @@ export function parseBulkReport(text) {
   const lines = String(text ?? '').split(/\r?\n/).map((l) => l.trimEnd()).filter((l) => l.trim());
   if (lines.length === 0) return { headers: null, rows: [] };
 
-  const delim = lines[0].includes('\t') ? '\t' : ',';
+  // Delimiter: tabs win if ANY line uses them — sheet exports are
+  // tab-separated while their title/preamble rows are single-cell.
+  const tabbed = lines.filter((l) => l.includes('\t')).length;
+  const delim = tabbed > 0 ? '\t' : ',';
   let headers = null;
   let dataLines = lines;
-  if (looksLikeHeader(lines[0].split(delim).map((s) => s.trim()))) {
-    headers = lines[0].split(delim).map((s) => s.trim());
-    dataLines = lines.slice(1);
+  // The header row may not be the first line (sheets have title/preamble
+  // rows) — find it anywhere in the first few lines and skip the preamble.
+  const headerIdx = lines.slice(0, 6).findIndex((l) => looksLikeHeader(l.split(delim).map((s) => s.trim())));
+  if (headerIdx !== -1) {
+    headers = lines[headerIdx].split(delim).map((s) => s.trim());
+    dataLines = lines.slice(headerIdx + 1);
   }
   const rows = dataLines.map((line, idx) => {
     const cells = line.split(delim).map((s) => s.trim());

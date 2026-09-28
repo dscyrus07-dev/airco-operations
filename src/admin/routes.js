@@ -213,17 +213,17 @@ export function adminRouter() {
       const [arrivals, departures, inHouse, stats] = await Promise.all([
         query(
           `SELECT id, name, phone, room, journey_state FROM guests
-           WHERE check_in = ${TODAY} AND journey_state IN ('booked','pre_arrival')
+           WHERE check_in = ${TODAY} AND journey_state IN ('booked','pre_arrival') AND archived = FALSE
            ORDER BY name`
         ),
         query(
           `SELECT id, name, phone, room, journey_state FROM guests
-           WHERE check_out = ${TODAY} AND journey_state IN ('checked_in','in_stay','checkout_pending')
+           WHERE check_out = ${TODAY} AND journey_state IN ('checked_in','in_stay','checkout_pending') AND archived = FALSE
            ORDER BY name`
         ),
         query(
           `SELECT id, name, phone, room, journey_state FROM guests
-           WHERE journey_state IN ('checked_in','in_stay','checkout_pending')
+           WHERE journey_state IN ('checked_in','in_stay','checkout_pending') AND archived = FALSE
            ORDER BY name`
         ),
         query(

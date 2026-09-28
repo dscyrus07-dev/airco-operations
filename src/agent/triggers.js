@@ -253,7 +253,7 @@ export async function runDateTick(asOf = new Date()) {
   if (hour >= cfg.preArrivalSendHour) {
     const preArrival = await query(
       `SELECT * FROM guests
-       WHERE journey_state = 'booked'
+       WHERE journey_state = 'booked' AND archived = FALSE
          AND check_in = (($1::timestamptz AT TIME ZONE 'Asia/Kolkata')::date + 1)`,
       [asOf]
     );
@@ -267,7 +267,7 @@ export async function runDateTick(asOf = new Date()) {
   if (hour >= cfg.welcomeSendHour) {
     const welcomeDue = await query(
       `SELECT * FROM guests
-       WHERE journey_state IN ('booked','pre_arrival')
+       WHERE journey_state IN ('booked','pre_arrival') AND archived = FALSE
          AND check_in = (($1::timestamptz AT TIME ZONE 'Asia/Kolkata')::date)`,
       [asOf]
     );
@@ -278,7 +278,7 @@ export async function runDateTick(asOf = new Date()) {
 
   const inStay = await query(
     `SELECT * FROM guests
-     WHERE journey_state = 'checked_in'
+     WHERE journey_state = 'checked_in' AND archived = FALSE
        AND check_in <= ($1::timestamptz AT TIME ZONE 'Asia/Kolkata')::date`,
     [asOf]
   );

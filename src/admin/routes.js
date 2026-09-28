@@ -571,5 +571,95 @@ export function adminRouter() {
     }
   });
 
+  // ---- Google Sheets sync (OAuth offline refresh token) ----
+
+  // Browser-facing connect start: requires the admin token as a query param
+  // (the dashboard button includes it). Issues a single-use OAuth state.
+  router.get('/google/connect', async (req, res) => {
+    try {
+      const cfg = getConfig();
+      if (!cfg.googleOAuthClientId || !cfg.googleOAuthClientSecret) {
+        return res.status(503).send('Google OAuth not configured — set GOOGLE_OAUTH_CLIENT_ID / SECRET in Railway.');
+      }
+      const provided = String(req.query.token ?? '');
+      if (!provided || !safeEqual(provided, cfg.adminToken)) {
+        return res.status(401).send('unauthorized — open this from the dashboard Connect button.');
+      }
+      const { buildAuthUrl, issueState, redirectUri } = await import('../integrations/google-sheets.js');
+      const state = await issueState();
+      const url = buildAuthUrl({
+        clientId: cfg.googleOAuthClientId,
+        redirect: redirectUri(`${req.protocol}://${req.get('host')}`),
+        state,
+      });
+      res.redirect(url);
+    } catch (err) {
+      res.status(500).send(String(err.message ?? err));
+    }
+  });
+
+  // Google redirects here — public, but useless without a valid single-use
+  // state. Exchanges the code, stores the refresh token, shows the result.
+  router.get('/google/callback', async (req, res) => {
+    const page = (title, body) => res.status(200).type('html').send(
+      `<!doctype html><html><head><meta charset="utf-8"><title>${title}</title></head>
+       <body style="font-family:system-ui;max-width:560px;margin:60px auto;color:#111827">
+       <h2 style="font-size:18px">${title}</h2><div style="font-size:14px;line-height:1.6">${body}</div></body></html>`
+    );
+    try {
+      const cfg = getConfig();
+      const { consumeState, exchangeCode, storeRefreshToken, redirectUri } = await import('../integrations/google-sheets.js');
+      if (req.query.error) return page('Authorization declined', 'Google returned: ' + String(req.query.error));
+      const okState = await consumeState(String(req.query.state ?? ''));
+      if (!okState) return page('Invalid or expired link', 'Open the Connect button from the dashboard again.');
+      const tokens = await exchangeCode({
+        clientId: cfg.googleOAuthClientId,
+        clientSecret: cfg.googleOAuthClientSecret,
+        redirect: redirectUri(`${req.protocol}://${req.get('host')}`),
+        code: String(req.query.code ?? ''),
+      });
+      if (!tokens.refresh_token) {
+        return page('No refresh token received', 'Google did not return a refresh token. Reconnect and make sure to approve the consent screen fully (choose the account that owns the Zostel sheet).');
+      }
+      await storeRefreshToken(tokens.refresh_token);
+      return page('Google Sheet connected ✓',
+        'AirCo Agent can now read the Hotel Report tab. The 15-minute poll will import new Confirm Bookings automatically.<br><br>Optional: copy this refresh token into Railway as <code>GOOGLE_OAUTH_REFRESH_TOKEN</code> (env wins over the database copy):<br><code style="word-break:break-all">' + String(tokens.refresh_token) + '</code>');
+    } catch (err) {
+      return page('Connection failed', String(err.message ?? err));
+    }
+  });
+
+  // Status for the dashboard card.
+  router.get('/api/google/status', async (_req, res, next) => {
+    try {
+      const cfg = getConfig();
+      const { isConnected, getLastSync } = await import('../integrations/google-sheets.js');
+      res.json({
+        enabled: cfg.googleSheetsEnabled,
+        configured: Boolean(cfg.googleOAuthClientId && cfg.googleOAuthClientSecret && cfg.googleSheetId),
+        connected: await isConnected(),
+        sheetId: cfg.googleSheetId,
+        tab: cfg.googleSheetTab,
+        range: cfg.googleSheetRange,
+        pollMinutes: cfg.googleSheetsPollMinutes,
+        lastSync: await getLastSync(),
+      });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  // Manual "Sync Now".
+  router.post('/api/google/sync', async (_req, res) => {
+    try {
+      const { syncNow } = await import('../integrations/google-sheets.js');
+      const result = await syncNow();
+      if (result?.summary) await dispatchPending();
+      res.json(result);
+    } catch (err) {
+      res.status(400).json({ error: err.message });
+    }
+  });
+
   return router;
 }

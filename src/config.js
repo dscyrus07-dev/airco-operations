@@ -31,6 +31,14 @@ export function loadConfig(env = process.env) {
     welcomeSendHour: Number(env.WELCOME_SEND_HOUR ?? 10),
     checkoutReminderSendHour: Number(env.CHECKOUT_REMINDER_SEND_HOUR ?? 9),
     testRecipientNumber: String(env.TEST_RECIPIENT_NUMBER || '').trim(),
+    // Google Sheets sync (OAuth offline refresh token — no service-account key)
+    googleSheetsEnabled: String(env.GOOGLE_SHEETS_ENABLED || '').trim().toLowerCase() === 'true',
+    googleSheetId: String(env.GOOGLE_SHEET_ID || '').trim(),
+    googleSheetTab: String(env.GOOGLE_SHEET_TAB || 'Hotel Report').trim(),
+    googleSheetRange: String(env.GOOGLE_SHEET_RANGE || 'A:R').trim(),
+    googleSheetsPollMinutes: Number(env.GOOGLE_SHEETS_POLL_MINUTES || 15),
+    googleOAuthClientId: String(env.GOOGLE_OAUTH_CLIENT_ID || '').trim(),
+    googleOAuthClientSecret: String(env.GOOGLE_OAUTH_CLIENT_SECRET || '').trim(),
   };
 }
 

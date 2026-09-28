@@ -114,11 +114,30 @@ setInterval(() => {
   runDateTick(new Date()).catch((err) => console.error('[tick] error:', err));
   runJourneyScheduler().catch((err) => console.error('[journey] error:', err));
   dispatchPending().catch((err) => console.error('[dispatch] error:', err));
+  syncGoogleSheet().catch((err) => console.error('[sheets] error:', err));
 }, TICK_INTERVAL_MS).unref();
 
 runDateTick(new Date()).catch((err) => console.error('[tick] boot error:', err));
 runJourneyScheduler().catch((err) => console.error('[journey] boot error:', err));
 dispatchPending().catch((err) => console.error('[dispatch] boot error:', err));
+
+// Google Sheets poll: fetch the Hotel Report tab and feed the existing
+// importer. Runs on its own cadence (GOOGLE_SHEETS_POLL_MINUTES, default 15).
+let lastSheetSyncAt = 0;
+async function syncGoogleSheet(force = false) {
+  const cfg = getConfig();
+  if (!cfg.googleSheetsEnabled) return;
+  const intervalMs = Math.max(1, cfg.googleSheetsPollMinutes) * 60_000;
+  if (!force && Date.now() - lastSheetSyncAt < intervalMs) return;
+  lastSheetSyncAt = Date.now();
+  const { syncNow } = await import('./src/integrations/google-sheets.js');
+  const result = await syncNow();
+  if (result?.summary) {
+    await dispatchPending();
+    console.log(`[sheets] synced: ${result.summary.bookings} bookings, ${result.summary.confirmationsQueued} confirmations`);
+  }
+}
+syncGoogleSheet().catch((err) => console.error('[sheets] boot error:', err));
 
 app.listen(config.port, () => {
   console.log(`airco-agent listening on :${config.port} (property: ${config.property})`);

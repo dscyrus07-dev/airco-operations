@@ -1157,8 +1157,9 @@ function openBulkAdd() {
   renderGuestList();
   document.getElementById('detail').innerHTML = `
     <div class="dhead"><div><div class="pname" style="font-size:15px">Bulk import bookings</div>
-      <div class="pmeta">Paste the complete Zostel report exactly as exported — we detect booking rows, guest details, payments and reservation type automatically.</div></div></div>
+      <div class="pmeta">Paste the complete Zostel report exactly as exported — or connect the Google Sheet below for automatic sync.</div></div></div>
     <div class="dbody">
+      <div id="gsync-card" class="card" style="margin-bottom:14px"><div style="padding:12px 14px;font-size:13px;color:var(--dim)">Loading Google Sheet status…</div></div>
       <label class="fl">Paste today's Zostel booking report</label>
       <textarea class="in" id="bulk-text" rows="10" style="font-size:12.5px;font-family:monospace" placeholder="Paste the full report — tab-separated or comma-separated. Header row optional."></textarea>
       <div style="margin-top:12px;display:flex;align-items:center;gap:10px">
@@ -1167,6 +1168,49 @@ function openBulkAdd() {
       </div>
       <div id="bulk-preview" style="margin-top:14px"></div>
     </div>`;
+  loadGoogleSyncCard();
+}
+
+async function loadGoogleSyncCard() {
+  const el = document.getElementById('gsync-card');
+  if (!el) return;
+  try {
+    const s = await api('/google/status');
+    const last = s.lastSync
+      ? `last sync ${fmtTs(s.lastSync.at)} — ${s.lastSync.rows} rows${s.lastSync.summary ? `, ${s.lastSync.summary.bookings} bookings` : ''}${s.lastSync.ok ? '' : ' ⚠️'}`
+      : 'never synced';
+    const state = !s.enabled
+      ? '<span class="badge" style="background:#f3f4f6;color:#6b7280">Disabled</span>'
+      : !s.configured ? '<span class="badge" style="background:#fef3c7;color:#92400e">Not configured</span>'
+      : s.connected ? '<span class="badge" style="background:#d1fae5;color:#065f46">Connected ✓</span>'
+      : '<span class="badge" style="background:#fee2e2;color:#991b1b">Not connected</span>';
+    el.innerHTML = `
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+        <b style="font-size:13px">📊 Google Sheet sync</b> ${state}
+        <span style="color:var(--dim);font-size:12px">${esc(last)} · every ${s.pollMinutes} min · ${esc(s.tab)}!${esc(s.range)}</span>
+        <span style="margin-left:auto;display:flex;gap:8px">
+          ${s.enabled && s.configured && !s.connected ? `<button class="btn small" onclick="connectGoogle()">Connect Google</button>` : ''}
+          ${s.enabled && s.connected ? `<button class="btn small" onclick="googleSyncNow()">Sync now</button>` : ''}
+        </span>
+      </div>`;
+  } catch (e) {
+    el.innerHTML = `<div style="padding:12px 14px;font-size:12.5px;color:var(--dim)">Google Sheet sync unavailable: ${esc(e.message)}</div>`;
+  }
+}
+
+function connectGoogle() {
+  window.open('/admin/google/connect?token=' + encodeURIComponent(token()), '_blank');
+}
+
+async function googleSyncNow() {
+  try {
+    const r = await api('/google/sync', { method: 'POST' });
+    if (r.skipped) { toast('Google Sheets sync is disabled.', true); return; }
+    const s = r.summary;
+    celebrate(`Sheet synced — ${s.bookings} bookings, ${s.confirmationsQueued} confirmations, ${s.duplicates} duplicates skipped`);
+    loadGoogleSyncCard();
+    loadGuests();
+  } catch (e) { toast(e.message, true); }
 }
 
 function renderBulkPreview(r) {

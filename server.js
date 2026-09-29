@@ -1,7 +1,7 @@
 import express from 'express';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { loadConfig } from './src/config.js';
+import { loadConfig, getConfig } from './src/config.js';
 import { handleTwilioEvent } from './src/whatsapp/webhook.js';
 import { verifyTwilioSignature } from './src/whatsapp/signature.js';
 import { adminRouter } from './src/admin/routes.js';

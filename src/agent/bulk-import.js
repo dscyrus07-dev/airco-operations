@@ -55,12 +55,17 @@ async function upsertGuest(parsed, client = null) {
 // over to that booking so staff can check them in for the new stay (the state
 // machine only allows checked_in from booked/pre_arrival).
 export async function handoverToFutureBooking(guestId) {
+  // A genuine LATER reservation only: it must START on/after the stay that
+  // just ended. Without the arrival gate, the guest's own still-current
+  // reservation (early checkout, departure in the future) qualifies as
+  // "future" and hijacks the handover — wiping the checkout they just did.
   const future = await query(
-    `SELECT id, reservation_number, room_number, arrival, departure FROM bookings
-     WHERE guest_id = $1
-       AND (departure AT TIME ZONE 'Asia/Kolkata')::date
-           >= (now() AT TIME ZONE 'Asia/Kolkata')::date
-     ORDER BY arrival ASC LIMIT 1`,
+    `SELECT b.id, b.reservation_number, b.room_number, b.arrival, b.departure
+     FROM bookings b JOIN guests g ON g.id = b.guest_id
+     WHERE b.guest_id = $1 AND b.arrival IS NOT NULL
+       AND (b.arrival AT TIME ZONE 'Asia/Kolkata')::date
+           >= (g.check_out AT TIME ZONE 'Asia/Kolkata')::date
+     ORDER BY b.arrival ASC LIMIT 1`,
     [guestId]
   );
   if (!future.length) return false;
@@ -433,9 +438,16 @@ export async function sendManualTemplate(guestIds, templateName) {
       skipped.push({ id: g.id, name: g.name, reason: 'not checked out yet' });
       continue;
     }
+    // Review requests dedupe per CHECKOUT EPISODE, not per guest forever —
+    // a returning guest gets a fresh review request after each new checkout.
+    let sinceClause = '';
+    if (templateName === 'review_request') {
+      sinceClause = ' AND created_at > COALESCE((SELECT MAX(je.created_at) FROM journey_events je'
+        + " WHERE je.guest_id = $1 AND je.event = 'checked_out'), to_timestamp(0))";
+    }
     const already = await query(
-      `SELECT 1 FROM messages WHERE guest_id = $1 AND template_name = $2
-       AND status IN ('queued','sending','sent','delivered','read') LIMIT 1`,
+      'SELECT 1 FROM messages WHERE guest_id = $1 AND template_name = $2'
+      + " AND status IN ('queued','sending','sent','delivered','read')" + sinceClause + ' LIMIT 1',
       [g.id, templateName]
     );
     if (already.length > 0) { skipped.push({ id: g.id, name: g.name, reason: 'already sent' }); continue; }

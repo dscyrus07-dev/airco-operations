@@ -68,7 +68,9 @@ export function adminRouter() {
                   WHERE mw.guest_id = g.id AND mw.template_name = 'welcome'
                     AND mw.status IN ('queued','sent','delivered','read'))::int AS welcome_sent,
                 (SELECT count(*) FROM messages mr WHERE mr.guest_id = g.id AND mr.template_name = 'review_request'
-                    AND mr.status IN ('queued','sent','delivered','read'))::int AS review_sent
+                    AND mr.status IN ('queued','sent','delivered','read')
+                    AND mr.created_at > COALESCE((SELECT MAX(je.created_at) FROM journey_events je
+                                                  WHERE je.guest_id = g.id AND je.event = 'checked_out'), to_timestamp(0)))::int AS review_sent
          FROM guests g
          WHERE g.archived = FALSE
          ORDER BY g.id DESC
@@ -220,10 +222,16 @@ export function adminRouter() {
           `SELECT g.id, g.name, g.phone, g.room, g.journey_state,
              EXISTS(SELECT 1 FROM messages m WHERE m.guest_id = g.id
                     AND m.template_name = 'review_request'
-                    AND m.status IN ('queued','sending','sent','delivered','read'))::bool AS review_sent
+                    AND m.status IN ('queued','sending','sent','delivered','read')
+                    AND m.created_at > COALESCE((SELECT MAX(je.created_at) FROM journey_events je
+                                                 WHERE je.guest_id = g.id AND je.event = 'checked_out'), to_timestamp(0)))::bool AS review_sent
            FROM guests g
-           WHERE g.check_out = ${TODAY} AND g.archived = FALSE
-             AND g.journey_state IN ('checked_in','in_stay','checkout_pending','checked_out','review_requested','closed')
+           WHERE g.archived = FALSE
+             AND ((g.check_out = ${TODAY} AND g.journey_state IN ('checked_in','in_stay','checkout_pending'))
+               OR (g.journey_state IN ('checked_out','review_requested','closed')
+                   AND EXISTS(SELECT 1 FROM journey_events je WHERE je.guest_id = g.id
+                              AND je.event = 'checked_out'
+                              AND (je.created_at AT TIME ZONE 'Asia/Kolkata')::date = ${TODAY})))
            ORDER BY g.name`
         ),
         query(

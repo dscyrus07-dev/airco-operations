@@ -107,6 +107,20 @@ test('FIX 2 #5: checkout hands guest row over to a future reservation', async (t
   if (r.skipped) t.skip(r.reason);
 });
 
+test('early checkout: the guest own still-current reservation does NOT hijack the handover', async (t) => {
+  const r = await withDb(async (pool) => {
+    await cleanTables(pool);
+    const g = await insertGuest(pool, { phone: '919100000006', name: 'EarlyOut', state: 'checked_out', checkIn: istDate(-2), checkOut: istDate(1) });
+    await insertBooking(pool, { guestId: g.id, resNo: 'ZM900006', arrival: `${istDate(-1)} 13:00`, departure: `${istDate(1)} 10:00` });
+    const ok = await handoverToFutureBooking(g.id);
+    assert.equal(ok, false, 'own current reservation must not be treated as a future booking');
+    const guest = (await pool.query('SELECT journey_state FROM guests WHERE id = $1', [g.id])).rows[0];
+    assert.equal(guest.journey_state, 'checked_out');
+    return true;
+  });
+  if (r.skipped) t.skip(r.reason);
+});
+
 test('archived guest + re-import of their reservation → restored, no duplicate confirmation', async (t) => {
   const r = await withDb(async (pool) => {
     await cleanTables(pool);

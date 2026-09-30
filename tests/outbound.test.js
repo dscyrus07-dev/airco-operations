@@ -7,7 +7,7 @@ process.env.DATABASE_URL = process.env.TEST_DATABASE_URL
   ?? 'postgres://postgres:postgres@127.0.0.1:5432/airco_test';
 
 const { withDb, cleanTables, insertGuest } = await import('./db-helper.js');
-const { dispatchPending, queueMessage } = await import('../src/messaging/outbound.js');
+const { dispatchPending, queueMessage, reconcilePendingStatuses } = await import('../src/messaging/outbound.js');
 
 // Dry-run Twilio creds: sends "succeed" without network.
 const DRY_ENV = {
@@ -145,6 +145,37 @@ test('FIX 4 #3: next_attempt_at gating — future message skipped, others dispat
     const rows = (await pool.query('SELECT id, status FROM messages ORDER BY id')).rows;
     assert.equal(rows.find((m) => m.id === nowMsg.id).status, 'sent');
     assert.equal(rows.find((m) => m.id === later.id).status, 'queued'); // gated, untouched
+    return true;
+  });
+  if (r.skipped) t.skip(r.reason);
+});
+
+test('status reconciliation: stuck sent message is updated from Twilio API (callbacks lost)', async (t) => {
+  const r = await withDb(async (pool) => {
+    await cleanTables(pool);
+    const g = await insertGuest(pool, { phone: '919200000099', name: 'Recon' });
+    const inserted = await pool.query(
+      "INSERT INTO messages (guest_id, direction, content, message_type, status, trigger_reason, wa_message_id, updated_at) " +
+      "VALUES ($1, 'out', 'hi', 'free_text', 'sent', 'test', 'MMrecontest1', now() - interval '30 minutes') RETURNING *",
+      [g.id]);
+    const msg = inserted.rows[0];
+    const realFetch = globalThis.fetch;
+    const dryRun = process.env.WHATSAPP_DRY_RUN;
+    delete process.env.WHATSAPP_DRY_RUN; // stubbed fetch must be reachable
+    globalThis.fetch = async (url) => {
+      if (String(url).includes('MMrecontest1')) {
+        return { ok: true, json: async () => ({ status: 'delivered' }) };
+      }
+      return realFetch(url);
+    };
+    try {
+      await reconcilePendingStatuses();
+      const after = (await pool.query('SELECT status FROM messages WHERE id = $1', [msg.id])).rows[0];
+      assert.equal(after.status, 'delivered');
+    } finally {
+      globalThis.fetch = realFetch;
+      if (dryRun) process.env.WHATSAPP_DRY_RUN = dryRun;
+    }
     return true;
   });
   if (r.skipped) t.skip(r.reason);

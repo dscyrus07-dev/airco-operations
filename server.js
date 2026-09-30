@@ -11,7 +11,7 @@ import {
   runDateTick,
   findGuestByPhone,
 } from './src/agent/triggers.js';
-import { dispatchPending } from './src/messaging/outbound.js';
+import { dispatchPending, reconcilePendingStatuses } from './src/messaging/outbound.js';
 import { runJourneyScheduler } from './src/agent/bulk-import.js';
 import { query, closePool } from './src/db.js';
 
@@ -112,12 +112,14 @@ app.use(express.static(path.join(__dirname, 'public')));
 const TICK_INTERVAL_MS = 15 * 60_000;
 setInterval(() => {
   runDateTick(new Date()).catch((err) => console.error('[tick] error:', err));
+  reconcilePendingStatuses().catch((err) => console.error('[reconcile] error:', err));
   runJourneyScheduler().catch((err) => console.error('[journey] error:', err));
   dispatchPending().catch((err) => console.error('[dispatch] error:', err));
   syncGoogleSheet().catch((err) => console.error('[sheets] error:', err));
 }, TICK_INTERVAL_MS).unref();
 
 runDateTick(new Date()).catch((err) => console.error('[tick] boot error:', err));
+reconcilePendingStatuses().catch((err) => console.error('[reconcile] boot error:', err));
 runJourneyScheduler().catch((err) => console.error('[journey] boot error:', err));
 dispatchPending().catch((err) => console.error('[dispatch] boot error:', err));
 

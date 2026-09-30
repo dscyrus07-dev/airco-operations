@@ -146,6 +146,30 @@ async function sendOnce(msg) {
   }
 }
 
+// Status callbacks from Twilio can lag or stop entirely — outbound messages
+// left in queued/sent with a recorded SID are reconciled directly from
+// Twilio's API so the dashboard reflects delivery reality. Forward-only:
+// a failed message never moves back, ranks only increase.
+const STATUS_RANK = { queued: 0, sending: 1, sent: 2, delivered: 3, read: 4, failed: 5 };
+
+export async function reconcilePendingStatuses() {
+  const stale = await query(
+    `SELECT id, wa_message_id, status FROM messages
+     WHERE direction = 'out' AND status IN ('queued','sent')
+       AND wa_message_id IS NOT NULL AND wa_message_id NOT LIKE 'dryrun_%'
+       AND updated_at < now() - interval '10 minutes'
+     ORDER BY updated_at
+     LIMIT 20`
+  );
+  for (const m of stale.rows ?? stale) {
+    const status = await fetchMessageStatus(m.wa_message_id).catch(() => null);
+    if (!status) continue;
+    if ((STATUS_RANK[status] ?? -1) <= (STATUS_RANK[m.status] ?? -1)) continue;
+    await query('UPDATE messages SET status = $1, last_error = NULL, updated_at = now() WHERE id = $2', [status, m.id]);
+  }
+  return (stale.rows ?? stale).length;
+}
+
 // FIX 3: messages stuck in 'sending' (crash between claim and status write)
 // are reconciled — via Twilio's API when a SID was recorded — never blindly
 // resent. Without a SID the send outcome is unknown, so the message is failed

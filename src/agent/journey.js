@@ -11,26 +11,12 @@ export const STATES = [
 
 // Deterministic transition table. Only explicit events move the state — never the LLM.
 export const EVENTS = {
+  // Zostel's own PMS already sends booking confirmations — we never do.
+  // The event is still logged for the timeline; it just queues no message.
   booking_created: {
     from: ['booked'],
     to: 'booked',
-    message: 'booking_confirmation',
-    messageKind: 'journey',
-  },
-  pre_arrival_tick: {
-    from: ['booked'],
-    to: 'pre_arrival',
-    message: 'checkin_info',
-    messageKind: 'journey',
-  },
-  // Fires on the check-in DAY (morning tick). Self-transition: the state only
-  // moves to checked_in when staff actually checks the guest in — but if the
-  // guest is checked in first, this tick is rejected (no duplicate welcome;
-  // the uniq constraint also protects the message itself).
-  welcome_tick: {
-    from: ['booked', 'pre_arrival'],
-    to: 'self',
-    message: 'welcome',
+    message: null,
     messageKind: 'journey',
   },
   checked_in: {
@@ -51,11 +37,13 @@ export const EVENTS = {
     message: 'checkout_reminder',
     messageKind: 'journey',
   },
+  // Review requests are STAFF-SELECTED from the "Checking out today" list —
+  // checkout itself queues nothing (state still moves to checked_out).
   checked_out: {
     from: ['checkout_pending', 'in_stay', 'checked_in'],
     to: 'checked_out',
-    message: 'review_request',
-    messageKind: 'review',
+    message: null,
+    messageKind: 'journey',
   },
   review_received: {
     from: ['review_requested'],

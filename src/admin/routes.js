@@ -217,9 +217,14 @@ export function adminRouter() {
            ORDER BY name`
         ),
         query(
-          `SELECT id, name, phone, room, journey_state FROM guests
-           WHERE check_out = ${TODAY} AND journey_state IN ('checked_in','in_stay','checkout_pending') AND archived = FALSE
-           ORDER BY name`
+          `SELECT g.id, g.name, g.phone, g.room, g.journey_state,
+             EXISTS(SELECT 1 FROM messages m WHERE m.guest_id = g.id
+                    AND m.template_name = 'review_request'
+                    AND m.status IN ('queued','sending','sent','delivered','read'))::bool AS review_sent
+           FROM guests g
+           WHERE g.check_out = ${TODAY} AND g.archived = FALSE
+             AND g.journey_state IN ('checked_in','in_stay','checkout_pending','checked_out','review_requested','closed')
+           ORDER BY g.name`
         ),
         query(
           `SELECT id, name, phone, room, journey_state FROM guests

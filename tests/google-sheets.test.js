@@ -100,12 +100,12 @@ test('syncNow feeds fetched rows into the EXISTING importer (fetch stubbed)', as
       const out = await gs.syncNow();
       assert.equal(out.ok, true);
       assert.equal(out.summary.bookings, 1);
-      assert.equal(out.summary.confirmationsQueued, 1);
+      assert.equal(out.summary.confirmationsQueued, 0);
       const guest = (await pool.query(`SELECT name, journey_state FROM guests WHERE phone = '919600000001'`)).rows[0];
       assert.equal(guest.name, 'Sheet Guest');
       assert.equal(guest.journey_state, 'booked');
       const msgs = (await pool.query(`SELECT template_name FROM messages`)).rows;
-      assert.deepEqual(msgs.map((m) => m.template_name), ['booking_confirmation']);
+      assert.deepEqual(msgs.map((m) => m.template_name), []);
       const last = await gs.getLastSync();
       assert.equal(last.ok, true);
       assert.equal(last.rows, 2);

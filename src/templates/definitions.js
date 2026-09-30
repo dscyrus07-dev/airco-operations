@@ -10,6 +10,23 @@ function fmtDate(d) {
   });
 }
 
+// IST wall-clock time like "1:00 PM" — or null when the value carries no real
+// time component. Two sentinels: sheet cells without a time parse to 12:30
+// (07:00 UTC), and pure DATE columns arrive as midnight UTC.
+export function fmtIstTime(d) {
+  if (!d) return null;
+  const date = d instanceof Date ? d : new Date(d);
+  if (Number.isNaN(date.getTime())) return null;
+  if (date.getUTCHours() === 0 && date.getUTCMinutes() === 0) return null;
+  if (date.getUTCHours() === 7 && date.getUTCMinutes() === 0) return null;
+  return date.toLocaleTimeString('en-US', {
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true,
+    timeZone: 'Asia/Kolkata',
+  });
+}
+
 // These bodies must match the approved templates in Meta Business Manager exactly
 // (same name, language 'en', same variable positions). They double as the
 // free-text content sent inside the 24h session window (rendered via
@@ -32,57 +49,75 @@ export const TEMPLATES = [
     category: 'utility',
     body:
       'Hey {{1}}! 👋\n' +
-      'Mumbai mode: ON ⚡\n\n' +
-      'You\'re checking in at Zostel Mumbai on {{2}} from 1:00 PM.\n' +
-      '📍 Andheri East, off Military Road, Marol\n' +
-      '🎒 Carry a valid photo ID.\n\n' +
-      'Rooftop views, street food and a hostel full of travellers are waiting.\n' +
-      'Got an arrival question? Drop it right here.',
+      'Your Zostel Mumbai stay is just around the corner! 🏠\n' +
+      '📅 Check-in: {{2}}\n' +
+      '⏰ Check-in from: {{3}}\n' +
+      '🕙 Check-out: {{4}}\n' +
+      '📍 Reception is open 24/7\n' +
+      '🪪 Please keep a valid government ID handy for check-in.\n' +
+      'If you\'re arriving early, you\'re welcome to leave your luggage with us while you explore Mumbai.\n' +
+      'See you soon!\n' +
+      'Team Zostel Mumbai',
   },
   {
     name: 'activity_notice',
     category: 'utility',
     body:
-      '👀 Happening at Zostel Mumbai!\n\n' +
-      '{{1}}\n' +
-      '📅 {{2}}\n' +
-      '🕘 {{3}}\n' +
-      '📍 {{4}}\n\n' +
-      'Come meet the hostel gang — see you there ✌️',
+      'Hey {{1}}! �\n' +
+      'Something\'s happening at Zostel Mumbai! 🎉\n' +
+      '📌 {{2}}\n' +
+      '�️ {{3}}\n' +
+      '⏰ {{4}}\n' +
+      '📍 {{5}}\n' +
+      'Come join us, meet fellow travellers and make the most of your Mumbai stay! 🫶\n' +
+      'Want to join? Just reply YES and our team will help you out.\n' +
+      'See you there!\n' +
+      'Team Zostel Mumbai',
   },
   {
     name: 'welcome',
     category: 'utility',
     body:
-      '🚨 YOU HAVE ARRIVED!\n' +
-      'Welcome to Zostel Mumbai, {{1}} 🧡\n\n' +
-      'Your room is sorted. Your Mumbai story starts now.\n' +
-      '🌆 Catch a Marine Drive sunset\n' +
-      '🍜 Hunt down street food\n' +
-      '🎬 Rooftop movie nights\n' +
-      '👋 Meet the gang in the common area\n\n' +
-      'This chat is your direct line to us — need anything, just say hi.',
+      'Welcome to Zostel Mumbai, {{1}}! 🎉\n' +
+      'We\'re happy to have you here.\n' +
+      'Your accommodation details:\n' +
+      '🏠 Room: {{2}}\n' +
+      'A few useful things for your stay:\n' +
+      '📶 Wi-Fi details are available in your room\n' +
+      '� In-house Café: 08:30 AM – 10:30 PM\n' +
+      '☎️ Reception: 99\n' +
+      '☎️ Cafeteria: 88\n' +
+      '🕙 Check-out: 10:00 AM\n' +
+      'Need anything? Just reach out to our team at reception. We are here round the clock to assist you with everything.\n' +
+      'Now go explore Mumbai, meet fellow travellers and make yourself at home! ❤️\n' +
+      'Team Zostel Mumbai',
   },
   {
     name: 'checkout_reminder',
     category: 'utility',
     body:
-      'Hey {{1}} 👋\n' +
-      'Your Mumbai stay is wrapping up — check-out is by 10:00 AM today.\n' +
-      'Do a quick sweep for chargers, cables and that one sock hiding under the bed 😄\n\n' +
-      'Running late or need anything? Just reply here — we\'ve got you 😎',
+      'Hey {{1}}! 👋\n' +
+      'We hope you\'ve had a great time at Zostel Mumbai! ❤️\n' +
+      'Just a little reminder that your check-out is tomorrow by 10:00 AM.\n' +
+      '🏠 Room: {{2}}\n' +
+      'Before you leave:\n' +
+      '☑️ Check that you have all your belongings\n' +
+      '☑️ Return your keys/access card\n' +
+      '☑️ Settle any pending payments\n' +
+      'Need help with luggage storage or onward travel? Our reception team will be happy to help.\n' +
+      'See you again! ✨\n' +
+      'Team Zostel Mumbai',
   },
   {
     name: 'review_request',
     category: 'utility',
     body:
-      '🧡 And just like that… your Mumbai chapter comes to an end.\n' +
-      'Thanks for being part of the Zostel Mumbai gang, {{1}}.\n\n' +
-      'We hope you\'re leaving with a few new stories, a few new friends, and maybe a little more of Mumbai than you expected. 🌆\n\n' +
-      'Got a minute?\n' +
-      '⭐ Tell us how your stay was:\n' +
-      '{{2}}\n\n' +
-      'See you on the next adventure 🎒',
+      'Hey {{1}}! 👋\n' +
+      'Hope you had an amazing time at Zostel Mumbai! ❤️\n' +
+      'If you enjoyed your stay, we\'d love to hear about it. Your review helps fellow travellers discover us and helps our team keep getting better.\n' +
+      '⭐ {{2}}\n' +
+      'Thank you for staying with us. We hope to see you again on your next adventure!\n' +
+      'Team Zostel Mumbai',
   },
 ];
 
@@ -96,13 +131,16 @@ export function templateVariables(name, guest) {
         fmtDate(guest.check_out),
       ];
     case 'checkin_info':
-      // {{2}} = actual arrival date — keeps the copy timing-neutral for both
-      // the +1h-after-import trigger and the legacy day-before tick (FIX 8).
-      return [guest.name, fmtDate(guest.check_in)];
+      return [
+        guest.name,
+        fmtDate(guest.check_in),
+        fmtIstTime(guest.check_in_time ?? guest.check_in) ?? '1:00 PM',
+        fmtIstTime(guest.check_out_time ?? guest.check_out) ?? '10:00 AM',
+      ];
     case 'welcome':
-      return [guest.name];
+      return [guest.name, guest.room ?? 'Ask reception'];
     case 'checkout_reminder':
-      return [guest.name];
+      return [guest.name, guest.room ?? 'See reception'];
     case 'review_request':
       return [guest.name, REVIEW_URL];
     default:
@@ -110,13 +148,16 @@ export function templateVariables(name, guest) {
   }
 }
 
-// Renders {{1}}..{{n}} placeholders with actual values — used for the
-// free-text path (24h session window open) so guests get the real copy
-// instead of a Meta sample template.
+// Renders {{1}}..{{n}} placeholders with actual values — pure body+vars form
+// so the caller can use the effective (dashboard-edited) body.
+export function renderBody(body, vars) {
+  return String(body ?? '').replace(/\{\{(\d+)\}\}/g, (all, n) => String(vars[Number(n) - 1] ?? ''));
+}
+
 export function renderTemplateBody(name, vars) {
   const t = TEMPLATES.find((t) => t.name === name);
   if (!t) throw new Error(`unknown template: ${name}`);
-  return t.body.replace(/\{\{(\d+)\}\}/g, (all, n) => String(vars[Number(n) - 1] ?? ''));
+  return renderBody(t.body, vars);
 }
 
 export function templateComponents(vars) {

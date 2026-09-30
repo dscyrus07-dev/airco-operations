@@ -2,13 +2,7 @@ import { query } from '../db.js';
 import { transition } from './journey.js';
 import { canSendProactive } from './policy.js';
 import { queueMessage, dispatchPending } from '../messaging/outbound.js';
-import {
-  templateVariables,
-  templateComponents,
-  renderTemplateBody,
-} from '../templates/definitions.js';
 import { getConfig } from '../config.js';
-import { istHour } from '../property.js';
 
 export function normalizePhone(raw) {
   return String(raw ?? '').replace(/[^\d]/g, '');
@@ -51,18 +45,17 @@ export async function handleBookingWebhook(b) {
     ]
   );
   const guest = rows[0];
-  // FIX 5 (H4): manually-added guests join the SAME bookings-driven checkout
-  // reminder (departure date 13:00 IST) — the legacy day-before tick is
-  // retired, so their reminder schedule lives on a bookings row too.
-  // pre_arrival_due_at stays NULL: the legacy day-before pre-arrival tick
-  // still covers non-bulk guests (out of Phase 1 scope).
+  // Manually-added guests join the SAME bookings-driven scheduler as sheet
+  // imports: pre-arrival on the next tick, checkout reminder the night
+  // before departure at 20:00 IST.
   if (guest?.check_out) {
     // pg returns DATE columns as JS Dates — normalize to the IST calendar date
     const co = guest.check_out instanceof Date
       ? new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(guest.check_out)
       : String(guest.check_out).slice(0, 10);
     const [y, m, d] = co.split('-').map(Number);
-    const dueAt = new Date(Date.UTC(y, m - 1, d, 7, 30)); // 13:00 IST == 07:30 UTC
+    const dueAt = new Date(Date.UTC(y, m - 1, d - 1, 14, 30)); // night before, 20:00 IST == 14:30 UTC
+    const preArrivalDue = new Date();
     const existingManual = await query(
       'SELECT id FROM bookings WHERE guest_id = $1 AND reservation_number IS NULL LIMIT 1',
       [guest.id]
@@ -70,16 +63,17 @@ export async function handleBookingWebhook(b) {
     if (existingManual.length > 0) {
       await query(
         `UPDATE bookings SET arrival = $2, departure = $3, checkout_reminder_due_at = $4,
-           room_number = COALESCE($5, room_number), classification = 'BOOKING'
+           room_number = COALESCE($5, room_number), classification = 'BOOKING',
+           pre_arrival_due_at = COALESCE(pre_arrival_due_at, $6)
          WHERE id = $1`,
-        [existingManual[0].id, guest.check_in, guest.check_out, dueAt, guest.room]
+        [existingManual[0].id, guest.check_in, guest.check_out, dueAt, guest.room, preArrivalDue]
       );
     } else {
       await query(
         `INSERT INTO bookings (guest_id, guest_name, contact_number, room_number,
-           arrival, departure, classification, checkout_reminder_due_at)
-         VALUES ($1, $2, $3, $4, $5, $6, 'BOOKING', $7)`,
-        [guest.id, guest.name, guest.phone, guest.room, guest.check_in, guest.check_out, dueAt]
+           arrival, departure, classification, pre_arrival_due_at, checkout_reminder_due_at)
+         VALUES ($1, $2, $3, $4, $5, $6, 'BOOKING', $7, $8)`,
+        [guest.id, guest.name, guest.phone, guest.room, guest.check_in, guest.check_out, preArrivalDue, dueAt]
       );
     }
   }
@@ -129,7 +123,7 @@ export async function applyEventToGuest(guest, eventName, detail, asOf = new Dat
 
 async function maybeQueueProactive(guest, templateName, kind, triggerEvent, asOf) {
   const cfg = getConfig();
-  const { buildTemplateVars } = await import('../templates/store.js');
+  const { buildTemplateVars, buildTemplateComponents, renderTemplateText } = await import('../templates/store.js');
   const vars = await buildTemplateVars(templateName, guest);
   const [proactiveSentToday, openRequestCount, sessionOpen] = await Promise.all([
     countProactiveToday(guest.id, asOf),
@@ -151,7 +145,7 @@ async function maybeQueueProactive(guest, templateName, kind, triggerEvent, asOf
   const payload = sessionOpen
     ? {
         guestId: guest.id,
-        content: renderTemplateBody(templateName, vars),
+        content: await renderTemplateText(templateName, vars),
         messageType: 'free_text',
         templateName,
         triggerReason,
@@ -160,7 +154,7 @@ async function maybeQueueProactive(guest, templateName, kind, triggerEvent, asOf
         guestId: guest.id,
         messageType: 'template',
         templateName,
-        templateComponents: templateComponents(vars),
+        templateComponents: await buildTemplateComponents(templateName, vars),
         triggerReason,
       };
   // FIX 9 (M5): the cap is enforced atomically at queue time (guest row locked
@@ -246,36 +240,11 @@ export async function handleInboundCommand(guestId, command) {
 }
 
 export async function runDateTick(asOf = new Date()) {
-  const cfg = getConfig();
-  const hour = istHour(asOf);
-
-  // Pre-arrival: check-in is tomorrow; send from the configured morning hour.
-  if (hour >= cfg.preArrivalSendHour) {
-    const preArrival = await query(
-      `SELECT * FROM guests
-       WHERE journey_state = 'booked' AND archived = FALSE
-         AND check_in = (($1::timestamptz AT TIME ZONE 'Asia/Kolkata')::date + 1)`,
-      [asOf]
-    );
-    for (const g of preArrival) {
-      await applyEventToGuest(g, 'pre_arrival_tick', `date_tick check_in=${g.check_in}`, asOf);
-    }
-  }
-
-  // Welcome: on the check-in DAY, from the configured morning hour. Guests
-  // already checked in are skipped by the state machine (no duplicate welcome).
-  if (hour >= cfg.welcomeSendHour) {
-    const welcomeDue = await query(
-      `SELECT * FROM guests
-       WHERE journey_state IN ('booked','pre_arrival') AND archived = FALSE
-         AND check_in = (($1::timestamptz AT TIME ZONE 'Asia/Kolkata')::date)`,
-      [asOf]
-    );
-    for (const g of welcomeDue) {
-      await applyEventToGuest(g, 'welcome_tick', `date_tick check_in=${g.check_in}`, asOf);
-    }
-  }
-
+  // Message sends are no longer date-tick driven: pre-arrival fires on
+  // import via runJourneyScheduler, welcome fires on staff check-in, the
+  // checkout reminder fires the night before departure via the scheduler,
+  // and review requests are staff-selected. What remains here is the
+  // state-only in-stay transition for checked-in guests.
   const inStay = await query(
     `SELECT * FROM guests
      WHERE journey_state = 'checked_in' AND archived = FALSE
@@ -285,10 +254,4 @@ export async function runDateTick(asOf = new Date()) {
   for (const g of inStay) {
     await applyEventToGuest(g, 'in_stay_tick', `date_tick check_in=${g.check_in}`, asOf);
   }
-
-  // FIX 5 (H4): the legacy day-before checkout-reminder tick is RETIRED.
-  // The bookings-driven scheduler (runJourneyScheduler) is the single
-  // checkout-reminder trigger: departure DATE at 13:00 IST. Manually-added
-  // guests get a bookings row at creation (handleBookingWebhook) so they are
-  // covered by the same mechanism — no second parallel scheduler.
 }

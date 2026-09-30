@@ -367,7 +367,9 @@
         <div class="list maxh-560" id="today-arrivals"></div>
       </div>
       <div class="card">
-        <h2>Checking out today <span class="count" id="c-departures"></span></h2>
+        <h2>Checking out today <span class="count" id="c-departures"></span><span class="spacer"></span>
+          <label style="display:inline-flex;align-items:center;gap:4px;font-size:12px;font-weight:500;cursor:pointer"><input type="checkbox" id="dep-select-all" onchange="toggleAllDepartures(this.checked)"> All</label>
+          <button class="btn accent small" id="dep-review-btn" onclick="sendDeparturesReviews()">Send review</button></h2>
         <div class="list maxh-560" id="today-departures"></div>
       </div>
       <div class="card">
@@ -659,7 +661,7 @@ async function loadOverview() {
     document.getElementById('c-departures').textContent = '(' + d.departures.length + ')';
     document.getElementById('c-inhouse').textContent = '(' + d.inHouse.length + ')';
     document.getElementById('today-arrivals').innerHTML = peopleList(d.arrivals, 'No arrivals recorded for today.', true);
-    document.getElementById('today-departures').innerHTML = peopleList(d.departures, 'No check-outs today.', false, true);
+    document.getElementById('today-departures').innerHTML = renderDepartures(d.departures);
     document.getElementById('today-inhouse').innerHTML = peopleList(d.inHouse, 'Nobody in the property right now.', false, false, true);
   } catch (e) { toast(e.message, true); }
 }
@@ -696,6 +698,40 @@ function renderPulse(d) {
     </div>`;
 }
 
+function renderDepartures(rows) {
+  if (!rows.length) return '<div class="empty">No check-outs today.</div>';
+  return rows.map(g => {
+    const inHouse = ['checked_in','in_stay','checkout_pending'].includes(g.journey_state);
+    const eligible = !inHouse && !g.review_sent;
+    return `
+    <div class="prow">
+      ${eligible ? '<input type="checkbox" class="dep-cb" data-id="' + g.id + '">' : ''}
+      ${avatar(g.name)}
+      <div class="pmain">
+        <div class="pname">${esc(g.name)}</div>
+        <div class="pmeta">+${esc(g.phone)}${g.room ? ' &middot; Room ' + esc(g.room) : ''}</div>
+      </div>
+      ${inHouse ? '<button class="btn small" onclick="doCheckout(' + g.id + ')">Check out</button>' : ''}
+      ${!inHouse && g.review_sent ? '<span class="b b-checked_in">Review sent</span>' : ''}
+      <button class="btn secondary small" onclick="openGuest(${g.id})">Chat</button>
+    </div>`;
+  }).join('');
+}
+function toggleAllDepartures(on) {
+  document.querySelectorAll('.dep-cb').forEach(cb => { cb.checked = on; });
+}
+async function sendDeparturesReviews() {
+  const ids = [...document.querySelectorAll('.dep-cb:checked')].map(cb => Number(cb.dataset.id));
+  if (!ids.length) { toast('Select guests who have checked out first'); return; }
+  try {
+    const r = await api('/guests/send-review', { method: 'POST', body: JSON.stringify({ ids }) });
+    const skippedNote = r.skipped.length ? ' · ' + r.skipped.length + ' skipped (' + [...new Set(r.skipped.map(x => x.reason))].join(', ') + ')' : '';
+    toast('Review request sent to ' + r.sent + ' guest(s)' + skippedNote);
+    document.getElementById('dep-select-all').checked = false;
+    loadOverview();
+  } catch (e) { toast(e.message, true); }
+}
+
 function peopleList(rows, emptyText, checkin, checkout, viewChat) {
   if (!rows.length) return `<div class="empty">${emptyText}</div>`;
   return rows.map(g => `
@@ -720,11 +756,11 @@ async function doCheckin(id) {
   } catch (e) { toast(e.message, true); }
 }
 async function doCheckout(id) {
-  const ok = await confirmDialog({ title: 'Check this guest out?', message: 'This sends the review request message and moves the journey forward.', confirmText: 'Check out' });
+  const ok = await confirmDialog({ title: 'Check this guest out?', message: 'Moves the journey forward. Send the review request from the Checking out today list when ready.', confirmText: 'Check out' });
   if (!ok) return;
   try {
     await api('/guests/' + id + '/checkout', { method: 'POST' });
-    toast('Guest checked out — review request queued automatically.');
+    toast('Guest checked out — select them in the list to send the review request.');
     loadOverview();
   } catch (e) { toast(e.message, true); }
 }
@@ -744,19 +780,19 @@ function nextCommunication(g) {
   const today = istToday();
   switch (g.journey_state) {
     case 'booked':
-      if (g.check_in === today) return 'Welcome message · today 10:00 AM';
-      if (g.check_in) return 'Pre-arrival · ' + fmtDate(addDays(g.check_in, -1)) + ' · 10:00 AM';
+      if (g.check_in === today) return 'Check in to send the welcome';
+      if (g.check_in) return 'Pre-arrival · sent on import';
       return 'Awaiting check-in date';
     case 'pre_arrival':
-      return 'Welcome message · ' + fmtDate(g.check_in) + ' · 10:00 AM';
+      return 'Check in to send the welcome';
     case 'checked_in':
     case 'in_stay':
-      if (g.check_out && g.check_out === addDays(today, 1)) return 'Checkout reminder · tomorrow 9:00 AM';
+      if (g.check_out && g.check_out === addDays(today, 1)) return 'Checkout reminder · tonight 8:00 PM';
       return 'Activity eligible';
     case 'checkout_pending':
-      return 'Review request · after checkout';
+      return 'Review request · send manually after checkout';
     case 'checked_out':
-      return 'Review request';
+      return 'Review request · send manually';
     case 'review_requested':
       return 'Awaiting review';
     default:

@@ -3,7 +3,7 @@
 // the send path reads from here (60s cache), falling back to the built-in
 // definitions when a template has no DB row.
 import { query } from '../db.js';
-import { TEMPLATES, templateVariables } from './definitions.js';
+import { TEMPLATES, templateVariables, renderBody } from './definitions.js';
 
 const CACHE_TTL_MS = 60_000;
 let cache = { at: 0, map: null };
@@ -110,4 +110,33 @@ export async function buildTemplateVars(name, guest) {
     return [guest.name, reviewUrl];
   }
   return templateVariables(name, guest);
+}
+
+// Effective (dashboard-edited) body for a template — falls back to the
+// built-in definition when no DB row exists.
+export async function getEffectiveBody(name) {
+  const cfg = await getTemplateConfig(name);
+  if (cfg?.body) return cfg.body;
+  return TEMPLATES.find((t) => t.name === name)?.body ?? '';
+}
+
+// Twilio Content components trimmed to the ACTIVE body's placeholder count.
+// When a re-edited template is still pending Meta approval, the previous
+// approved body keeps delivering — sending more parameters than it declares
+// would get rejected, so extra vars are dropped rather than failing the send.
+export async function buildTemplateComponents(name, vars) {
+  const body = await getEffectiveBody(name);
+  const maxVar = (body.match(/\{\{(\d+)\}\}/g) ?? [])
+    .reduce((m, s) => Math.max(m, Number(s.match(/\d+/)[0])), 0);
+  const effective = maxVar > 0 ? vars.slice(0, maxVar) : vars;
+  return [{
+    type: 'body',
+    parameters: effective.map((text) => ({ type: 'text', text: String(text ?? '') })),
+  }];
+}
+
+// Renders the effective body for the 24h-session free-text path, so
+// dashboard copy edits apply there too.
+export async function renderTemplateText(name, vars) {
+  return renderBody(await getEffectiveBody(name), vars);
 }

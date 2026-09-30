@@ -23,8 +23,8 @@ function istDate(offsetDays = 0) {
 test('FIX 5 #1: bookings-driven reminder fires once, transitions to checkout_pending, idempotent', async (t) => {
   const r = await withDb(async (pool) => {
     await cleanTables(pool);
-    const g = await insertGuest(pool, { phone: '919300000001', name: 'Stay', state: 'in_stay', checkIn: istDate(-1), checkOut: istDate(0) });
-    await insertBooking(pool, { guestId: g.id, resNo: 'ZM950001', arrival: `${istDate(-1)} 13:00`, departure: `${istDate(0)} 10:00` });
+    const g = await insertGuest(pool, { phone: '919300000001', name: 'Stay', state: 'in_stay', checkIn: istDate(-1), checkOut: istDate(1) });
+    await insertBooking(pool, { guestId: g.id, resNo: 'ZM950001', arrival: `${istDate(-1)} 13:00`, departure: `${istDate(1)} 10:00` });
     await pool.query(`UPDATE bookings SET checkout_reminder_due_at = now() - interval '1 hour'`);
     await runJourneyScheduler();
     let msgs = (await pool.query(`SELECT template_name FROM messages`)).rows;
@@ -52,10 +52,10 @@ test('FIX 5 #2: manually-added guest gets a bookings row with 13:00 IST checkout
     const b = (await pool.query('SELECT * FROM bookings WHERE guest_id = $1', [guest.id])).rows[0];
     assert.ok(b, 'bookings row created for manual guest');
     assert.equal(b.classification, 'BOOKING');
-    assert.equal(b.pre_arrival_due_at, null, 'no +1h pre-arrival for manual adds');
-    // departure date at 13:00 IST == 07:30 UTC
+    assert.ok(b.pre_arrival_due_at, 'manual guests get pre-arrival on the next tick');
+    // night BEFORE departure at 20:00 IST == 14:30 UTC
     const [y, m, d] = istDate(3).split('-').map(Number);
-    assert.equal(new Date(b.checkout_reminder_due_at).toISOString(), new Date(Date.UTC(y, m - 1, d, 7, 30)).toISOString());
+    assert.equal(new Date(b.checkout_reminder_due_at).toISOString(), new Date(Date.UTC(y, m - 1, d - 1, 14, 30)).toISOString());
     return true;
   });
   if (r.skipped) t.skip(r.reason);

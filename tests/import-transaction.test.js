@@ -35,7 +35,7 @@ test('FIX 7 #1: a row that throws mid-processing rolls back fully — no orphan 
     const bookings = (await pool.query('SELECT reservation_number FROM bookings ORDER BY reservation_number')).rows.map((b) => b.reservation_number);
     assert.deepEqual(bookings, ['ZM960001'], 'no orphan booking from the rolled-back row');
     const msgs = (await pool.query('SELECT count(*)::int AS n FROM messages')).rows[0].n;
-    assert.equal(msgs, 1, 'no confirmation message for the rolled-back row');
+    assert.equal(msgs, 0, 'no confirmation message for the rolled-back row');
     const batch = (await pool.query('SELECT booking_count, failed_count FROM import_batches ORDER BY id DESC LIMIT 1')).rows[0];
     assert.equal(batch.booking_count, 1);
     assert.equal(batch.failed_count, 1);
@@ -58,7 +58,7 @@ test('FIX 10 #2: same reservation twice in ONE paste → second is DUPLICATE, no
     const bookings = (await pool.query('SELECT count(*)::int AS n FROM bookings')).rows[0].n;
     assert.equal(bookings, 1);
     const msgs = (await pool.query('SELECT count(*)::int AS n FROM messages')).rows[0].n;
-    assert.equal(msgs, 1, 'exactly one confirmation');
+    assert.equal(msgs, 0, 'no confirmation — Zostel sends their own');
     return true;
   });
   if (r.skipped) t.skip(r.reason);

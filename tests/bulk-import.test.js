@@ -1,4 +1,5 @@
 // FIX 2 (C2) tests: re-import must never regress an in-house guest's journey.
+// Zostel sends its own booking confirmations — imports queue NO message.
 // DB-backed — skips when the test database (docker compose) is unavailable.
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -22,36 +23,34 @@ const istOf = (d) => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata'
 // report dates are DD-MM-YYYY HH.mm — like the real Zostel export
 const dmy = (iso) => { const [y, m, d] = iso.split('-'); return `${d}-${m}-${y}`; };
 
-test('FIX 2 #1: brand-new guest + booking → booked, confirmation queued', async (t) => {
+test('import: brand-new guest + booking → booked, NO confirmation (Zostel sends their own)', async (t) => {
   const r = await withDb(async (pool) => {
     await cleanTables(pool);
     const out = await importBulkReport(REPORT('New Guest', '919100000001', 'ZM900001', '101', `${dmy(istDate(1))} 13.00`, `${dmy(istDate(2))} 10.00`), { execute: true });
     assert.equal(out.summary.bookings, 1);
-    assert.equal(out.summary.confirmationsQueued, 1);
+    assert.equal(out.summary.confirmationsQueued, 0);
     const guest = (await pool.query('SELECT * FROM guests')).rows[0];
     assert.equal(guest.journey_state, 'booked');
     const msgs = (await pool.query(`SELECT template_name, status FROM messages`)).rows;
-    assert.equal(msgs.length, 1);
-    assert.equal(msgs[0].template_name, 'booking_confirmation');
-    assert.equal(msgs[0].status, 'queued');
+    assert.equal(msgs.length, 0, 'no booking confirmation is sent');
     return true;
   });
   if (r.skipped) t.skip(r.reason);
 });
 
-test('FIX 2 #2: in-house guest + new future booking → state preserved, confirmation still sent', async (t) => {
+test('FIX 2 #2: in-house guest + new future booking → state preserved, no message', async (t) => {
   const r = await withDb(async (pool) => {
     await cleanTables(pool);
     const g = await insertGuest(pool, { phone: '919100000002', name: 'In House', state: 'in_stay', checkIn: istDate(-1), checkOut: istDate(0) });
     const out = await importBulkReport(REPORT('In House', '919100000002', 'ZM900002', '202', `${dmy(istDate(3))} 13.00`, `${dmy(istDate(4))} 10.00`), { execute: true });
-    assert.equal(out.summary.confirmationsQueued, 1);
+    assert.equal(out.summary.bookings, 1);
     const guests = (await pool.query('SELECT * FROM guests')).rows;
     assert.equal(guests.length, 1, 'no second guest created for same phone');
     const guest = guests[0];
     assert.equal(guest.journey_state, 'in_stay'); // NOT regressed to booked
     assert.equal(istOf(guest.check_out), istDate(0)); // stay dates untouched
     const msgs = (await pool.query('SELECT template_name FROM messages')).rows;
-    assert.deepEqual(msgs.map((m) => m.template_name).sort(), ['booking_confirmation']); // no welcome/pre-arrival
+    assert.deepEqual(msgs, []); // no confirmation, no welcome, no pre-arrival
     return true;
   });
   if (r.skipped) t.skip(r.reason);

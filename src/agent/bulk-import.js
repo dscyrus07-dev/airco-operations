@@ -166,23 +166,15 @@ export async function importBulkReport(text, { uploadedBy = 'dashboard', execute
         results.push({ guest: row.parsed.guest_name, resNo: row.parsed.reservation_number, status: 'duplicate in this paste — skipped', classification: 'DUPLICATE' });
         continue;
       }
-      let confirmationQueued = false;
-      if (row.resType === 'CONFIRM_BOOKING') {
-        await queueConfirmation(guestId, row.parsed, client);
-        confirmationQueued = true;
-      }
       await client.query('COMMIT');
       summary.bookings++;
-      if (row.resType === 'CONFIRM_BOOKING') {
-        summary.confirmBookings++;
-        summary.confirmationsQueued++;
-      }
+      if (row.resType === 'CONFIRM_BOOKING') summary.confirmBookings++;
       results.push({
         guest: row.parsed.guest_name,
         resNo: row.parsed.reservation_number,
         phone: '+' + row.parsed.contact_number,
         room: row.parsed.room_number,
-        status: `booking added${confirmationQueued ? ' · confirmation queued' : ''}`,
+        status: 'booking added',
         classification: 'BOOKING',
       });
     } catch (err) {
@@ -212,8 +204,10 @@ export async function importBulkReport(text, { uploadedBy = 'dashboard', execute
 async function insertBookingRow(row, guestId, batchId, classification, opts = {}, client = null) {
   const run = client ? (sql, params) => client.query(sql, params).then((r) => r.rows) : query;
   const p = row.parsed ?? {};
-  const preArrivalDue = opts.withSchedule ? new Date(Date.now() + 3600_000) : null;
-  const checkoutDue = opts.withSchedule && p.departure ? istDateAt1300(p.departure) : null;
+  // Pre-arrival goes out on the next scheduler tick after import (staff only
+  // enter rows when a booking is real, so there is no hold period).
+  const preArrivalDue = opts.withSchedule ? new Date() : null;
+  const checkoutDue = opts.withSchedule && p.departure ? istNightBeforeAt2000(p.departure) : null;
   return run(
     `INSERT INTO bookings (reservation_number, guest_id, emp_name, contact_number, guest_name,
        room_number, rate, arrival, departure, nights, pax, reservation_type,
@@ -230,33 +224,12 @@ async function insertBookingRow(row, guestId, batchId, classification, opts = {}
   );
 }
 
-// departure DATE at 13:00 Asia/Kolkata → UTC instant
-function istDateAt1300(departure) {
+// The NIGHT BEFORE the departure date at 20:00 Asia/Kolkata → UTC instant.
+// ("check-out is tomorrow" copy — the reminder must land the evening before.)
+function istNightBeforeAt2000(departure) {
   const d = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(departure);
   const [y, m, day] = d.split('-').map(Number);
-  return new Date(Date.UTC(y, m - 1, day, 7, 30)); // 13:00 IST == 07:30 UTC
-}
-
-async function queueConfirmation(guestId, parsed, client = null) {
-  const { buildTemplateVars } = await import('../templates/store.js');
-  const guest = {
-    id: guestId,
-    name: parsed.guest_name,
-    room: parsed.room_number,
-    check_in: parsed.arrival?.toISOString?.().slice(0, 10),
-    check_out: parsed.departure?.toISOString?.().slice(0, 10),
-  };
-  const vars = await buildTemplateVars('booking_confirmation', guest);
-  // NOTE (FIX 2): journey_state / stay dates are managed by upsertGuest only —
-  // the confirmation must never regress an in-house guest's state.
-  // FIX 7: the message insert joins the row's transaction via `client`.
-  await queueMessage({
-    guestId,
-    messageType: 'template',
-    templateName: 'booking_confirmation',
-    templateComponents: [{ type: 'body', parameters: vars.map((text) => ({ type: 'text', text: String(text ?? '') })) }],
-    triggerReason: 'bulk_import:booking_created',
-  }, client);
+  return new Date(Date.UTC(y, m - 1, day - 1, 14, 30)); // 20:00 IST == 14:30 UTC
 }
 
 // YYYY-MM-DD in Asia/Kolkata — lexicographic date comparison for sanity gates.
@@ -279,8 +252,8 @@ async function proactiveCountToday(guestId) {
 // ---- journey scheduler: pre-arrival (+1h) and checkout reminder (1 PM) ----
 
 export async function runJourneyScheduler() {
-  // Pre-arrival: due 1 hour after import. Sends the approved checkin_info
-  // template (our pre-arrival message). Idempotent via sent_at.
+  // Pre-arrival: due on import (next tick). Sends the approved checkin_info
+  // template. Idempotent per booking via the trigger_reason dedupe below.
   const duePre = await query(
     `SELECT b.*, g.name AS g_name, g.journey_state, g.archived, g.whatsapp_opt_in, g.ai_paused
      FROM bookings b JOIN guests g ON g.id = b.guest_id
@@ -307,28 +280,32 @@ export async function runJourneyScheduler() {
       await query(`UPDATE bookings SET pre_arrival_sent_at = now(), pre_arrival_status = 'skipped_daily_cap' WHERE id = $1`, [b.id]);
       continue;
     }
+    // Dedupe is per BOOKING (trigger_reason carries b.id): a re-imported
+    // reservation never resends, but a guest's NEW reservation still gets
+    // its own pre-arrival message.
     const already = await query(
-      `SELECT 1 FROM messages WHERE guest_id = $1 AND template_name = 'checkin_info'
+      `SELECT 1 FROM messages WHERE guest_id = $1 AND trigger_reason = $2
        AND status IN ('queued','sending','sent','delivered','read') LIMIT 1`,
-      [b.guest_id]
+      [b.guest_id, `bulk_import:pre_arrival:${b.id}`]
     );
     if (already.length > 0) {
       await query(`UPDATE bookings SET pre_arrival_sent_at = now(), pre_arrival_status = 'already_sent' WHERE id = $1`, [b.id]);
       continue;
     }
-    const { buildTemplateVars } = await import('../templates/store.js');
+    const { buildTemplateVars, buildTemplateComponents } = await import('../templates/store.js');
     const { queueProactiveCapped } = await import('../messaging/outbound.js');
     const vars = await buildTemplateVars('checkin_info', {
       name: b.g_name,
-      check_in: b.arrival?.toISOString?.().slice(0, 10),
-      check_out: b.departure?.toISOString?.().slice(0, 10),
+      check_in: b.arrival,
+      check_in_time: b.arrival,
+      check_out_time: b.departure,
     });
     // FIX 9: cap enforced atomically at queue time; null ⇒ cap was reached.
     const queued = await queueProactiveCapped({
       guestId: b.guest_id,
       messageType: 'template',
       templateName: 'checkin_info',
-      templateComponents: [{ type: 'body', parameters: vars.map((text) => ({ type: 'text', text: String(text ?? '') })) }],
+      templateComponents: await buildTemplateComponents('checkin_info', vars),
       triggerReason: `bulk_import:pre_arrival:${b.id}`,
     }, getConfig().proactiveDailyCap,
       `SELECT count(*)::int AS n FROM messages
@@ -340,11 +317,21 @@ export async function runJourneyScheduler() {
       await query(`UPDATE bookings SET pre_arrival_sent_at = now(), pre_arrival_status = 'skipped_daily_cap' WHERE id = $1`, [b.id]);
       continue;
     }
+    // Move the guest's journey forward so the timeline reflects the send.
+    if (b.journey_state === 'booked') {
+      await query(`UPDATE guests SET journey_state = 'pre_arrival' WHERE id = $1 AND journey_state = 'booked'`, [b.guest_id]);
+      await query(
+        `INSERT INTO journey_events (guest_id, from_state, to_state, event, detail)
+         VALUES ($1, 'booked', 'pre_arrival', 'pre_arrival_tick', $2)`,
+        [b.guest_id, `pre_arrival booking ${b.id}`]
+      );
+    }
     await query(`UPDATE bookings SET pre_arrival_sent_at = now(), pre_arrival_status = 'sent' WHERE id = $1`, [b.id]);
   }
 
-  // Checkout reminder: due 13:00 IST on the departure date. Only guests still
-  // in-house are eligible — already-checked-out guests are marked skipped.
+  // Checkout reminder: due 20:00 IST the NIGHT BEFORE the departure date.
+  // Only guests still in-house are eligible — already-checked-out guests are
+  // marked skipped.
   const dueCheckout = await query(
     `SELECT b.*, g.name AS g_name, g.journey_state, g.archived, g.whatsapp_opt_in, g.ai_paused
      FROM bookings b JOIN guests g ON g.id = b.guest_id
@@ -359,8 +346,9 @@ export async function runJourneyScheduler() {
       continue;
     }
     // H6 sanity gates: never remind about a stay whose departure is already
-    // past, and never fire a reminder more than 24h stale.
-    if (b.departure && istDateStr(b.departure) < istDateStr(new Date())) {
+    // past, and never fire a reminder more than 24h stale. The copy says
+    // "check-out is tomorrow", so a departure due TODAY is also skipped.
+    if (b.departure && istDateStr(b.departure) <= istDateStr(new Date())) {
       await query(`UPDATE bookings SET checkout_reminder_sent_at = now(), checkout_reminder_status = 'skipped_backdated' WHERE id = $1`, [b.id]);
       continue;
     }
@@ -377,23 +365,23 @@ export async function runJourneyScheduler() {
       continue;
     }
     const already = await query(
-      `SELECT 1 FROM messages WHERE guest_id = $1 AND template_name = 'checkout_reminder'
+      `SELECT 1 FROM messages WHERE guest_id = $1 AND trigger_reason = $2
        AND status IN ('queued','sending','sent','delivered','read') LIMIT 1`,
-      [b.guest_id]
+      [b.guest_id, `bulk_import:checkout_reminder:${b.id}`]
     );
     if (already.length > 0) {
       await query(`UPDATE bookings SET checkout_reminder_sent_at = now(), checkout_reminder_status = 'already_sent' WHERE id = $1`, [b.id]);
       continue;
     }
-    const { buildTemplateVars } = await import('../templates/store.js');
+    const { buildTemplateVars, buildTemplateComponents } = await import('../templates/store.js');
     const { queueProactiveCapped } = await import('../messaging/outbound.js');
-    const vars = await buildTemplateVars('checkout_reminder', { name: b.g_name });
+    const vars = await buildTemplateVars('checkout_reminder', { name: b.g_name, room: b.room_number });
     // FIX 9: cap enforced atomically at queue time; null ⇒ cap was reached.
     const queued = await queueProactiveCapped({
       guestId: b.guest_id,
       messageType: 'template',
       templateName: 'checkout_reminder',
-      templateComponents: [{ type: 'body', parameters: vars.map((text) => ({ type: 'text', text: String(text ?? '') })) }],
+      templateComponents: await buildTemplateComponents('checkout_reminder', vars),
       triggerReason: `bulk_import:checkout_reminder:${b.id}`,
     }, getConfig().proactiveDailyCap,
       `SELECT count(*)::int AS n FROM messages
@@ -438,19 +426,26 @@ export async function sendManualTemplate(guestIds, templateName) {
     const g = guests[0];
     if (g.whatsapp_opt_in === false) { skipped.push({ id: g.id, name: g.name, reason: 'opted out of WhatsApp' }); continue; }
     if (g.ai_paused) { skipped.push({ id: g.id, name: g.name, reason: 'AI paused' }); continue; }
+    // Review requests only make sense once the guest has actually left —
+    // the departures card lists guests still in-house too, so gate here.
+    if (templateName === 'review_request'
+        && !['checked_out', 'review_requested', 'closed'].includes(g.journey_state)) {
+      skipped.push({ id: g.id, name: g.name, reason: 'not checked out yet' });
+      continue;
+    }
     const already = await query(
       `SELECT 1 FROM messages WHERE guest_id = $1 AND template_name = $2
        AND status IN ('queued','sending','sent','delivered','read') LIMIT 1`,
       [g.id, templateName]
     );
     if (already.length > 0) { skipped.push({ id: g.id, name: g.name, reason: 'already sent' }); continue; }
-    const { buildTemplateVars } = await import('../templates/store.js');
+    const { buildTemplateVars, buildTemplateComponents } = await import('../templates/store.js');
     const vars = await buildTemplateVars(templateName, g);
     const msg = await queueMessage({
       guestId: g.id,
       messageType: 'template',
       templateName,
-      templateComponents: [{ type: 'body', parameters: vars.map((text) => ({ type: 'text', text: String(text ?? '') })) }],
+      templateComponents: await buildTemplateComponents(templateName, vars),
       triggerReason: `manual:${templateName}`,
     });
     if (msg) sent.push({ id: g.id, name: g.name });

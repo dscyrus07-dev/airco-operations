@@ -15,14 +15,15 @@ function istToday() {
 import crypto from 'node:crypto';
 
 // Template variables for the approved activity_notice template — must match
-// its Meta-approved body order: {{1}} event, {{2}} date, {{3}} time, {{4}} place.
-function activityVars(a, property) {
+// its Meta-approved body order: {{1}} guest name, {{2}} event, {{3}} date,
+// {{4}} time, {{5}} place.
+function activityVars(a, property, guestName) {
   const date = new Date(`${a.date}T12:00:00Z`).toLocaleDateString('en-IN', {
     weekday: 'long',
     day: 'numeric',
     month: 'short',
   });
-  return [a.event_name, date, a.time, a.description || property];
+  return [guestName, a.event_name, date, a.time, a.description || property];
 }
 
 // Content hash — the same activity content never re-sends to a guest who
@@ -36,6 +37,7 @@ function activityContentHash(a) {
 }
 
 // Deterministic activity rendering — engaging but never LLM-generated (Phase 1).
+// Mirrors the approved activity_notice copy for the stored message record.
 function formatMessage(a, property) {
   const date = new Date(`${a.date}T12:00:00Z`).toLocaleDateString('en-IN', {
     weekday: 'long',
@@ -46,10 +48,10 @@ function formatMessage(a, property) {
   return (
     `👀 ${lead} at ${property}!\n\n` +
     `${a.event_name.toUpperCase()}\n` +
-    `📅 ${date}\n` +
-    `🕘 ${a.time}` +
+    `�️ ${date}\n` +
+    `⏰ ${a.time}` +
     (a.description ? `\n📍 ${a.description}` : '') +
-    `\n\nCome meet the hostel gang — see you there ✌️`
+    `\n\nCome join us — see you there!`
   );
 }
 
@@ -132,15 +134,22 @@ async function broadcast(activity) {
       console.warn(`[activity ${activity.id}] suppressed for guest ${g.id}: ${decision.reason}`);
       continue;
     }
+    const { getEffectiveBody, buildTemplateComponents } = await import('../templates/store.js');
+    // While the 5-var template version is pending Meta approval, the active
+    // body is still the 4-var one (no guest name) — match its positions.
+    const effBody = await getEffectiveBody('activity_notice');
+    const maxVar = (effBody.match(/{{(d+)}}/g) ?? [])
+      .reduce((m, x) => Math.max(m, Number(x.match(/d+/)[0])), 0);
+    const vars = maxVar >= 5
+      ? activityVars(activity, cfg.property, g.name)
+      : activityVars(activity, cfg.property, null).slice(1);
     const msg = await queueMessage({
       guestId: g.id,
       content: formatMessage(activity, cfg.property), // free-text fallback copy
       messageType: 'template',
       templateName: 'activity_notice',
-      templateComponents: [{
-        type: 'body',
-        parameters: activityVars(activity, cfg.property).map((text) => ({ type: 'text', text: String(text ?? '') })),
-      }],
+      templateComponents: await buildTemplateComponents(
+        'activity_notice', activityVars(activity, cfg.property, g.name)),
       triggerReason,
     });
     if (msg) queued.push({ guestId: g.id, name: g.name });

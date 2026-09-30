@@ -41,14 +41,27 @@ test('FIX 8: checkin_info copy no longer says "tomorrow"', () => {
   assert.equal(validateTemplateBody(body), null, 'new body must pass Meta variable-position rules');
 });
 
-test('FIX 8: rendered checkin_info shows the real arrival date for a 3-days-out import', () => {
+test('checkin_info renders name, dates and default times for a date-only import', () => {
   const vars = templateVariables('checkin_info', { name: 'Vedank', check_in: '2026-09-29', check_out: '2026-09-30' });
-  assert.equal(vars.length, 2);
+  assert.equal(vars.length, 4);
   assert.match(vars[1], /Sep/, `arrival formatted, got: ${vars[1]}`);
+  assert.equal(vars[2], '1:00 PM', 'no arrival time in data → property default');
+  assert.equal(vars[3], '10:00 AM', 'no departure time in data → property default');
   const rendered = renderTemplateBody('checkin_info', vars);
   assert.ok(!/tomorrow/i.test(rendered));
-  assert.match(rendered, /checking in at Zostel Mumbai on 29 Sep/);
+  assert.match(rendered, /Check-in: 29 Sep/);
   assert.match(rendered, /Vedank/);
+});
+
+test('checkin_info uses sheet times when present', () => {
+  const arrival = new Date(Date.UTC(2026, 8, 29, 7, 30)); // 13:00 IST
+  const departure = new Date(Date.UTC(2026, 8, 30, 4, 30)); // 10:00 AM IST
+  const vars = templateVariables('checkin_info', {
+    name: 'Vedank', check_in: '2026-09-29', check_out: '2026-09-30',
+    check_in_time: arrival, check_out_time: departure,
+  });
+  assert.equal(vars[2], '1:00 PM');
+  assert.equal(vars[3], '10:00 AM');
 });
 
 // Editor follow-up: edits that ADD variables must fill example gaps —

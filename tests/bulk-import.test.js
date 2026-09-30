@@ -121,6 +121,23 @@ test('early checkout: the guest own still-current reservation does NOT hijack th
   if (r.skipped) t.skip(r.reason);
 });
 
+test('duplicate re-sync never restarts a checked-out guest journey (sheet keeps old rows)', async (t) => {
+  const r = await withDb(async (pool) => {
+    await cleanTables(pool);
+    const text = REPORT('Sync Guest', '919100000007', 'ZM900007', '606', `${dmy(istDate(-1))} 13.00`, `${dmy(istDate(1))} 10.00`);
+    await importBulkReport(text, { execute: true });
+    // staff checks the guest out; the row REMAINS in the sheet and re-syncs
+    await pool.query(`UPDATE guests SET journey_state = 'checked_out'`);
+    await importBulkReport(text, { execute: true });
+    await importBulkReport(text, { execute: true });
+    const guest = (await pool.query('SELECT journey_state, archived FROM guests')).rows[0];
+    assert.equal(guest.journey_state, 'checked_out', 'duplicate re-sync must not flip a done-state guest to booked');
+    assert.equal(guest.archived, false);
+    return true;
+  });
+  if (r.skipped) t.skip(r.reason);
+});
+
 test('archived guest + re-import of their reservation → restored, no duplicate confirmation', async (t) => {
   const r = await withDb(async (pool) => {
     await cleanTables(pool);

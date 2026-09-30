@@ -19,7 +19,7 @@ import { queueMessage } from '../messaging/outbound.js';
 const IN_HOUSE_STATES = ['checked_in', 'in_stay', 'checkout_pending'];
 const JOURNEY_DONE_STATES = ['checked_out', 'review_requested', 'closed'];
 
-async function upsertGuest(parsed, client = null) {
+async function upsertGuest(parsed, client = null, { duplicate = false } = {}) {
   const run = client ? (sql, params) => client.query(sql, params).then((r) => r.rows) : query;
   const existing = await run(
     'SELECT id, journey_state, archived FROM guests WHERE phone = $1',
@@ -32,6 +32,11 @@ async function upsertGuest(parsed, client = null) {
     // to LIVE guests (an archived guest has no active journey from the
     // operator's perspective).
     if (!g.archived && IN_HOUSE_STATES.includes(g.journey_state)) return g.id; // active stay untouched
+    // A DUPLICATE (already-imported reservation re-syncing from the sheet)
+    // must never touch a live guest's journey: the sheet keeps every row, so
+    // without this guard a checked-out guest would be flipped back to
+    // 'booked' on every 15-minute poll. Only an ARCHIVED guest is restored.
+    if (duplicate && !g.archived) return g.id;
     const startNewJourney = g.archived || JOURNEY_DONE_STATES.includes(g.journey_state);
     await run(
       `UPDATE guests SET name = COALESCE(NULLIF($2, ''), name), room = COALESCE($3, room),
@@ -151,9 +156,9 @@ export async function importBulkReport(text, { uploadedBy = 'dashboard', execute
     }
     if (dup) {
       summary.duplicates++;
-      // The reservation exists — no duplicate confirmation. But if its guest
-      // was archived (deleted from the dashboard), a re-import restores them.
-      await upsertGuest(row.parsed);
+      // The reservation exists — no duplicate confirmation. Only an ARCHIVED
+      // guest is restored; a live guest's journey is never touched by re-syncs.
+      await upsertGuest(row.parsed, null, { duplicate: true });
       results.push({ guest: row.parsed.guest_name, resNo: row.parsed.reservation_number, status: 'already imported — skipped', classification: 'DUPLICATE' });
       continue;
     }

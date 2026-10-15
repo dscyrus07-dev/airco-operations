@@ -1188,12 +1188,14 @@ function openAdd() {
     </div>`;
 }
 
+const REPORT_SHEET_URL = 'https://docs.google.com/spreadsheets/d/1_3mZrwm82mjbR4h1ozz2bnz-Mi6J3SEjT32kZs-qUco/edit#gid=1299211273';
+
 function openBulkAdd() {
   selectedId = null;
   renderGuestList();
   document.getElementById('detail').innerHTML = `
     <div class="dhead"><div><div class="pname" style="font-size:15px">Bulk import bookings</div>
-      <div class="pmeta">Paste the complete Zostel report exactly as exported — or connect the Google Sheet below for automatic sync.</div></div></div>
+      <div class="pmeta">Paste the complete Zostel report exactly as exported — <a href="${REPORT_SHEET_URL}" target="_blank" rel="noopener" style="color:var(--accent)">open the report sheet ↗</a> — or connect the Google Sheet below for automatic sync.</div></div></div>
     <div class="dbody">
       <div id="gsync-card" class="card" style="margin-bottom:14px"><div style="padding:12px 14px;font-size:13px;color:var(--dim)">Loading Google Sheet status…</div></div>
       <label class="fl">Paste today's Zostel booking report</label>
@@ -1225,6 +1227,7 @@ async function loadGoogleSyncCard() {
         <b style="font-size:13px">📊 Google Sheet sync</b> ${state}
         <span style="color:var(--dim);font-size:12px">${esc(last)} · every ${s.pollMinutes} min · ${esc(s.tab)}!${esc(s.range)}</span>
         <span style="margin-left:auto;display:flex;gap:8px">
+          ${s.sheetId ? `<a class="btn small secondary" href="https://docs.google.com/spreadsheets/d/${encodeURIComponent(s.sheetId)}/edit" target="_blank" rel="noopener" style="text-decoration:none;display:inline-flex;align-items:center">Open sheet ↗</a>` : `<a class="btn small secondary" href="${REPORT_SHEET_URL}" target="_blank" rel="noopener" style="text-decoration:none;display:inline-flex;align-items:center">Open sheet ↗</a>`}
           ${s.enabled && s.configured && !s.connected ? `<button class="btn small" onclick="connectGoogle()">Connect Google</button>` : ''}
           ${s.enabled && s.connected ? `<button class="btn small" onclick="googleSyncNow()">Sync now</button>` : ''}
         </span>

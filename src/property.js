@@ -1,26 +1,26 @@
-// Zostel Mumbai property knowledge — single source for message copy and
+// Zostel Morjim property knowledge — single source for message copy and
 // (later) reactive AI Q&A. Never dump all of this into one message.
 export const PROPERTY = {
-  name: 'Zostel Mumbai',
-  area: 'Andheri East',
+  name: 'Zostel Morjim',
+  area: 'Morjim, North Goa',
   address:
-    'Zostel Mumbai, Karotra Niwas School, off Military Road, near Prime Academy, Bhavani Nagar, Marol, Andheri East, Mumbai, Maharashtra 400059',
-  shortAddress: 'Andheri East, Mumbai',
+    'Pushkin House, 1088/1, Near Nanu Wines, Madhlowaddo, Morjim, Pernem, North Goa, Goa',
+  shortAddress: 'Morjim, Goa',
   checkInTime: '1:00 PM',
   checkOutTime: '10:00 AM',
   highlights: [
-    'a cafe for remote-work days',
+    'steps from Morjim Beach',
+    'a cafe for slow mornings and remote-work days',
     'a common area full of games',
-    'a Bollywood-themed rooftop',
-    'movie nights',
-    'pub crawls with the hostel gang',
+    'beach sunsets with the hostel gang',
+    'a social backpacker crowd',
   ],
   experiences: [
-    'an evening walk at Marine Drive',
-    'the Gateway of India',
-    'Mumbai street food hunting',
-    'the Elephanta Caves',
-    'a Bandstand sunset',
+    'a sunset at Morjim Beach',
+    'Chapora Fort views',
+    'spotting Olive Ridley turtles (in season)',
+    'the Ashwem–Mandrem beach stretch',
+    'kayaking on the Chapora river',
   ],
   rules: {
     age: '18+ only',

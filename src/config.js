@@ -24,7 +24,7 @@ export function loadConfig(env = process.env) {
     databaseUrl: String(env.DATABASE_URL).trim(),
     port: Number(env.PORT || 3000),
     timezone: 'Asia/Kolkata',
-    property: 'Zostel Mumbai',
+    property: 'Zostel Morjim',
     proactiveDailyCap: Number(env.PROACTIVE_DAILY_CAP || 2),
     // Scheduled send times (Asia/Kolkata). Configurable, not hardcoded in logic.
     preArrivalSendHour: Number(env.PRE_ARRIVAL_SEND_HOUR ?? 10),

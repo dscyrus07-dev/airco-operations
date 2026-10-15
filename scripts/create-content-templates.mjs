@@ -12,33 +12,33 @@ const TEMPLATES = [
     name: 'booking_confirmation',
     body:
       'Hey {{1}} 👋\n' +
-      'Your Mumbai adventure is officially booked! 🎒\n' +
-      '📍 Zostel Mumbai, Andheri East\n' +
+      'Your Goa adventure is officially booked! 🎒\n' +
+      '📍 Zostel Morjim, Morjim Beach\n' +
       '🛏 {{2}}\n' +
       '📅 {{3}} → {{4}}\n\n' +
-      'Cafe, games, a Bollywood rooftop and a gang of travellers — all waiting for you.\n' +
+      'Beach days, a buzzing cafe and a gang of travellers — all waiting for you.\n' +
       'Need anything before you arrive? Just drop it here 😎',
   },
   {
     name: 'checkin_info',
     body:
       'Hey {{1}}! 👋\n' +
-      "Tomorrow's the day — Mumbai mode: ON ⚡\n\n" +
-      "You're checking in at Zostel Mumbai tomorrow from 1:00 PM.\n" +
-      '📍 Andheri East, off Military Road, Marol\n' +
+      "Tomorrow's the day — Goa mode: ON ⚡\n\n" +
+      "You're checking in at Zostel Morjim tomorrow from 1:00 PM.\n" +
+      '📍 Morjim Beach, North Goa\n' +
       '🎒 Carry a valid photo ID.\n\n' +
-      'Rooftop views, street food and a hostel full of travellers are waiting.\n' +
+      'Beach sunsets, shack food and a hostel full of travellers are waiting.\n' +
       'Got an arrival question? Drop it right here.',
   },
   {
     name: 'welcome',
     body:
       '🚨 YOU HAVE ARRIVED!\n' +
-      'Welcome to Zostel Mumbai, {{1}} 🧡\n\n' +
-      'Your room is sorted. Your Mumbai story starts now.\n' +
-      '🌆 Catch a Marine Drive sunset\n' +
-      '🍜 Hunt down street food\n' +
-      '🎬 Rooftop movie nights\n' +
+      'Welcome to Zostel Morjim, {{1}} 🧡\n\n' +
+      'Your room is sorted. Your Goa story starts now.\n' +
+      '� Catch a Morjim Beach sunset\n' +
+      '� Beach shack hopping\n' +
+      '� Chapora Fort views\n' +
       '👋 Meet the gang in the common area\n\n' +
       'This chat is your direct line to us — need anything, just say hi.',
   },
@@ -46,7 +46,7 @@ const TEMPLATES = [
     name: 'checkout_reminder',
     body:
       'Hey {{1}} 👋\n' +
-      'Your Mumbai stay is almost at its final chapter.\n\n' +
+      'Your Goa stay is almost at its final chapter.\n\n' +
       '🕙 Check-out tomorrow by 10:00 AM.\n' +
       'Do a quick sweep for chargers, cables and that one sock hiding under the bed 😄\n\n' +
       "Need anything before you head out? We're right here.",
@@ -54,9 +54,9 @@ const TEMPLATES = [
   {
     name: 'review_request',
     body:
-      '🧡 And just like that… your Mumbai chapter comes to an end.\n' +
-      'Thanks for being part of the Zostel Mumbai gang, {{1}}.\n\n' +
-      "We hope you're leaving with a few new stories, a few new friends, and maybe a little more of Mumbai than you expected. 🌆\n\n" +
+      '🧡 And just like that… your Goa chapter comes to an end.\n' +
+      'Thanks for being part of the Zostel Morjim gang, {{1}}.\n\n' +
+      "We hope you're leaving with a few new stories, a few new friends, and maybe a little more of Goa than you expected. 🌆\n\n" +
       'Got a minute?\n' +
       '⭐ Tell us how your stay was:\n' +
       '{{2}}\n\n' +

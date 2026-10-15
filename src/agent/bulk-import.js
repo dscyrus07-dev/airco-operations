@@ -50,7 +50,7 @@ async function upsertGuest(parsed, client = null, { duplicate = false } = {}) {
   }
   const rows = await run(
     `INSERT INTO guests (phone, name, property, room, check_in, check_out, journey_state, whatsapp_opt_in)
-     VALUES ($1, $2, 'Zostel Mumbai', $3, $4, $5, 'booked', TRUE) RETURNING id`,
+     VALUES ($1, $2, 'Zostel Morjim', $3, $4, $5, 'booked', TRUE) RETURNING id`,
     [parsed.contact_number, parsed.guest_name, parsed.room_number, parsed.arrival, parsed.departure]
   );
   return rows[0].id;

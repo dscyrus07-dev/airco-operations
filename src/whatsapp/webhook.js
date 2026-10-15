@@ -77,7 +77,7 @@ export async function ingestInboundText({ phone, profileName, text, waMessageId 
   } else {
     const inserted = await query(
       `INSERT INTO guests (phone, name, property, whatsapp_opt_in)
-       VALUES ($1, $2, 'Zostel Mumbai', TRUE)
+       VALUES ($1, $2, 'Zostel Morjim', TRUE)
        RETURNING id`,
       [phone, profileName || `Guest ${phone.slice(-4)}`]
     );

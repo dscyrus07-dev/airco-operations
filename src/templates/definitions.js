@@ -37,11 +37,11 @@ export const TEMPLATES = [
     category: 'utility',
     body:
       'Hey {{1}} 👋\n' +
-      'Your Mumbai adventure is officially booked! 🎒\n' +
-      '📍 Zostel Mumbai, Andheri East\n' +
+      'Your Goa adventure is officially booked! 🎒\n' +
+      '📍 Zostel Morjim, Morjim Beach\n' +
       '🛏 {{2}}\n' +
       '📅 {{3}} → {{4}}\n\n' +
-      'Cafe, games, a Bollywood rooftop and a gang of travellers — all waiting for you.\n' +
+      'Beach days, a buzzing cafe and a gang of travellers — all waiting for you.\n' +
       'Need anything before you arrive? Just drop it here 😎',
   },
   {
@@ -49,36 +49,36 @@ export const TEMPLATES = [
     category: 'utility',
     body:
       'Hey {{1}}! 👋\n' +
-      'Your Zostel Mumbai stay is just around the corner! 🏠\n' +
+      'Your Zostel Morjim stay is just around the corner! 🏠\n' +
       '📅 Check-in: {{2}}\n' +
       '⏰ Check-in from: {{3}}\n' +
       '🕙 Check-out: {{4}}\n' +
       '📍 Reception is open 24/7\n' +
       '🪪 Please keep a valid government ID handy for check-in.\n' +
-      'If you\'re arriving early, you\'re welcome to leave your luggage with us while you explore Mumbai.\n' +
+      'If you\'re arriving early, you\'re welcome to leave your luggage with us while you hit the beach.\n' +
       'See you soon!\n' +
-      'Team Zostel Mumbai',
+      'Team Zostel Morjim',
   },
   {
     name: 'activity_notice',
     category: 'utility',
     body:
       'Hey {{1}}! �\n' +
-      'Something\'s happening at Zostel Mumbai! 🎉\n' +
+      'Something\'s happening at Zostel Morjim! 🎉\n' +
       '📌 {{2}}\n' +
       '�️ {{3}}\n' +
       '⏰ {{4}}\n' +
       '📍 {{5}}\n' +
-      'Come join us, meet fellow travellers and make the most of your Mumbai stay! 🫶\n' +
+      'Come join us, meet fellow travellers and make the most of your Goa stay! 🫶\n' +
       'Want to join? Just reply YES and our team will help you out.\n' +
       'See you there!\n' +
-      'Team Zostel Mumbai',
+      'Team Zostel Morjim',
   },
   {
     name: 'welcome',
     category: 'utility',
     body:
-      'Welcome to Zostel Mumbai, {{1}}! 🎉\n' +
+      'Welcome to Zostel Morjim, {{1}}! 🎉\n' +
       'We\'re happy to have you here.\n' +
       'Your accommodation details:\n' +
       '🏠 Room: {{2}}\n' +
@@ -89,15 +89,15 @@ export const TEMPLATES = [
       '☎️ Cafeteria: 88\n' +
       '🕙 Check-out: 10:00 AM\n' +
       'Need anything? Just reach out to our team at reception. We are here round the clock to assist you with everything.\n' +
-      'Now go explore Mumbai, meet fellow travellers and make yourself at home! ❤️\n' +
-      'Team Zostel Mumbai',
+      'Now go explore Morjim, meet fellow travellers and make yourself at home! ❤️\n' +
+      'Team Zostel Morjim',
   },
   {
     name: 'checkout_reminder',
     category: 'utility',
     body:
       'Hey {{1}}! 👋\n' +
-      'We hope you\'ve had a great time at Zostel Mumbai! ❤️\n' +
+      'We hope you\'ve had a great time at Zostel Morjim! ❤️\n' +
       'Just a little reminder that your check-out is tomorrow by 10:00 AM.\n' +
       '🏠 Room: {{2}}\n' +
       'Before you leave:\n' +
@@ -106,18 +106,18 @@ export const TEMPLATES = [
       '☑️ Settle any pending payments\n' +
       'Need help with luggage storage or onward travel? Our reception team will be happy to help.\n' +
       'See you again! ✨\n' +
-      'Team Zostel Mumbai',
+      'Team Zostel Morjim',
   },
   {
     name: 'review_request',
     category: 'utility',
     body:
       'Hey {{1}}! 👋\n' +
-      'Hope you had an amazing time at Zostel Mumbai! ❤️\n' +
+      'Hope you had an amazing time at Zostel Morjim! ❤️\n' +
       'If you enjoyed your stay, we\'d love to hear about it. Your review helps fellow travellers discover us and helps our team keep getting better.\n' +
       '⭐ {{2}}\n' +
       'Thank you for staying with us. We hope to see you again on your next adventure!\n' +
-      'Team Zostel Mumbai',
+      'Team Zostel Morjim',
   },
 ];
 

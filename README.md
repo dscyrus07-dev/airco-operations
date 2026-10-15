@@ -1,4 +1,4 @@
-# Airco Agent — WhatsApp Guest Experience System (Zostel Mumbai)
+# Airco Agent — WhatsApp Guest Experience System (Zostel Morjim)
 
 One WhatsApp number, one continuous guest conversation, driven by a deterministic
 journey state machine. Postgres is the only source of truth.

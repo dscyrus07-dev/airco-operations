@@ -8,7 +8,7 @@ const TOKEN = process.env.TWILIO_AUTH_TOKEN;
 const auth = 'Basic ' + Buffer.from(`${SID}:${TOKEN}`).toString('base64');
 
 const BODY =
-  '👀 Happening at Zostel Mumbai!\n\n' +
+  '👀 Happening at Zostel Morjim!\n\n' +
   '{{1}}\n' +
   '📅 {{2}}\n' +
   '🕘 {{3}}\n' +

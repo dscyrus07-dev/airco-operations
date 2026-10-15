@@ -7,13 +7,9 @@ import 'dotenv/config';
 const SID = process.env.TWILIO_ACCOUNT_SID;
 const AUTH = 'Basic ' + Buffer.from(`${SID}:${process.env.TWILIO_AUTH_TOKEN}`).toString('base64');
 
-const OLD_SIDS = [
-  'HXeec76008fcf79952409bf2506807f00f',
-  'HX3caf11159e7933877d46b9414ff2d4d3',
-  'HX06198780aabd970c5f1f8d8322b13b72',
-  'HX3053a0b546e828b10412b242e272e6bb',
-  'HXb125434476a7983c60638504aefbbf21',
-];
+// Morjim rebrand run: keep the existing Mumbai templates live until the new
+// ones are approved — nothing is deleted.
+const OLD_SIDS = [];
 
 const TEMPLATES = [
   {
@@ -21,11 +17,11 @@ const TEMPLATES = [
     examples: { 1: 'Cyrus', 2: 'Room 203', 3: '21 Sept', 4: '23 Sept' },
     body:
       'Hey {{1}} 👋\n' +
-      'Your Mumbai adventure is officially booked! 🎒\n' +
-      '📍 Zostel Mumbai, Andheri East\n' +
+      'Your Goa adventure is officially booked! 🎒\n' +
+      '📍 Zostel Morjim, Morjim Beach\n' +
       '🛏 {{2}}\n' +
       '📅 {{3}} → {{4}}\n\n' +
-      'Cafe, games, a Bollywood rooftop and a gang of travellers — all waiting for you.\n' +
+      'Beach days, a buzzing cafe and a gang of travellers — all waiting for you.\n' +
       'Need anything before you arrive? Just drop it here 😎',
   },
   {
@@ -33,11 +29,11 @@ const TEMPLATES = [
     examples: { 1: 'Cyrus' },
     body:
       'Hey {{1}}! 👋\n' +
-      "Tomorrow's the day — Mumbai mode: ON ⚡\n\n" +
-      "You're checking in at Zostel Mumbai tomorrow from 1:00 PM.\n" +
-      '📍 Andheri East, off Military Road, Marol\n' +
+      "Tomorrow's the day — Goa mode: ON ⚡\n\n" +
+      "You're checking in at Zostel Morjim tomorrow from 1:00 PM.\n" +
+      '📍 Morjim Beach, North Goa\n' +
       '🎒 Carry a valid photo ID.\n\n' +
-      'Rooftop views, street food and a hostel full of travellers are waiting.\n' +
+      'Beach sunsets, shack food and a hostel full of travellers are waiting.\n' +
       'Got an arrival question? Drop it right here.',
   },
   {
@@ -45,11 +41,11 @@ const TEMPLATES = [
     examples: { 1: 'Cyrus' },
     body:
       '🚨 YOU HAVE ARRIVED!\n' +
-      'Welcome to Zostel Mumbai, {{1}} 🧡\n\n' +
-      'Your room is sorted. Your Mumbai story starts now.\n' +
-      '🌆 Catch a Marine Drive sunset\n' +
-      '🍜 Hunt down street food\n' +
-      '🎬 Rooftop movie nights\n' +
+      'Welcome to Zostel Morjim, {{1}} 🧡\n\n' +
+      'Your room is sorted. Your Goa story starts now.\n' +
+      '🌆 Catch a Morjim Beach sunset\n' +
+      '🍜 Beach shack hopping\n' +
+      '🎬 Chapora Fort views\n' +
       '👋 Meet the gang in the common area\n\n' +
       'This chat is your direct line to us — need anything, just say hi.',
   },
@@ -58,18 +54,18 @@ const TEMPLATES = [
     examples: { 1: 'Cyrus' },
     body:
       'Hey {{1}} 👋\n' +
-      'Your Mumbai stay is almost at its final chapter.\n\n' +
+      'Your Goa stay is almost at its final chapter.\n\n' +
       '🕙 Check-out tomorrow by 10:00 AM.\n' +
       'Do a quick sweep for chargers, cables and that one sock hiding under the bed 😄\n\n' +
       "Need anything before you head out? We're right here.",
   },
   {
     name: 'review_request',
-    examples: { 1: 'Cyrus', 2: 'https://g.page/r/zostel-mumbai/review' },
+    examples: { 1: 'Cyrus', 2: 'https://www.zostel.com/zostel/morjim/' },
     body:
-      '🧡 And just like that… your Mumbai chapter comes to an end.\n' +
-      'Thanks for being part of the Zostel Mumbai gang, {{1}}.\n\n' +
-      "We hope you're leaving with a few new stories, a few new friends, and maybe a little more of Mumbai than you expected. 🌆\n\n" +
+      '🧡 And just like that… your Goa chapter comes to an end.\n' +
+      'Thanks for being part of the Zostel Morjim gang, {{1}}.\n\n' +
+      "We hope you're leaving with a few new stories, a few new friends, and maybe a little more of Goa than you expected. 🌆\n\n" +
       'Got a minute?\n' +
       '⭐ Tell us how your stay was:\n' +
       '{{2}}\n\n' +
@@ -106,7 +102,7 @@ console.log('\nCreating templates with example values...');
 const created = {};
 for (const t of TEMPLATES) {
   const r = await call('https://content.twilio.com/v1/Content', 'POST', {
-    friendly_name: `airco_${t.name}_v2`,
+    friendly_name: `airco_morjim_${t.name}`,
     language: 'en',
     variables: t.examples,
     types: { 'twilio/text': { body: t.body } },

@@ -2,7 +2,7 @@ CREATE TABLE IF NOT EXISTS guests (
   id            BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
   phone         TEXT NOT NULL UNIQUE,
   name          TEXT NOT NULL,
-  property      TEXT NOT NULL DEFAULT 'Zostel Mumbai',
+  property      TEXT NOT NULL DEFAULT 'Zostel Morjim',
   room          TEXT,
   check_in      DATE,
   check_out     DATE,

@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Airco Agent — Zostel Mumbai</title>
+<title>Airco Agent — Zostel Morjim</title>
 <style>
   :root {
     --bg:#f4f5f7; --card:#fff; --line:#e6e8ec; --text:#111827; --dim:#6b7280; --faint:#9ca3af;
@@ -332,7 +332,7 @@
 
 <div id="gate" style="display:none">
   <h2>Airco Agent</h2>
-  <div class="sub">Guest operations console — Zostel Mumbai</div>
+  <div class="sub">Guest operations console — Zostel Morjim</div>
   <label class="fl">Admin token</label>
   <input type="password" id="token-input" placeholder="Paste ADMIN_TOKEN from .env" class="in">
   <div style="margin-top:14px"><button class="btn" onclick="saveToken()">Unlock dashboard</button></div>
@@ -341,7 +341,7 @@
 
 <div id="app" style="display:none">
 <header class="topbar">
-  <div class="brand"><div class="dot">A</div><div>Airco Agent<div class="sub">Zostel Mumbai</div></div></div>
+  <div class="brand"><div class="dot">A</div><div>Airco Agent<div class="sub">Zostel Morjim</div></div></div>
   <nav class="tabs">
     <button id="tab-today" onclick="switchView('today')">Today</button>
     <button id="tab-guests" onclick="switchView('guests')">Guests</button>
@@ -1180,7 +1180,7 @@ function openAdd() {
         <div class="full" style="margin-top:4px">
           <label style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text);cursor:pointer">
             <input type="checkbox" id="a-optin" checked style="width:auto">
-            Guest has agreed to receive WhatsApp updates from Zostel Mumbai (required for automated messages)
+            Guest has agreed to receive WhatsApp updates from Zostel Morjim (required for automated messages)
           </label>
         </div>
       </div>
@@ -1818,7 +1818,7 @@ function renderActivityPreview() {
   const day = new Date(date + 'T12:00:00Z').toLocaleDateString('en-IN', { weekday:'long', day:'numeric', month:'short' });
   const lead = date === istToday() ? "Today's plan" : 'Coming up';
   el.textContent =
-    `👀 ${lead} at Zostel Mumbai!\n\n` +
+    `👀 ${lead} at Zostel Morjim!\n\n` +
     `${name.toUpperCase()}\n` +
     `📅 ${day}\n` +
     `🕘 ${time}` +

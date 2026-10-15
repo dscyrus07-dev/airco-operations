@@ -13,12 +13,13 @@ const EXPECTED = [
   { name: 'review_request', vars: 2 },
 ];
 
+// Morjim rebrand templates (created 14 Oct 2026, pending Meta approval at submit time)
 const NEW_SIDS = {
-  booking_confirmation: 'HX46757941c0eb25362757331afc055129',
-  checkin_info: 'HXc862fce6acee1d990febb945859ddbce',
-  welcome: 'HXcd2d742fdbf25d3977b688fc4f6f471c',
-  checkout_reminder: 'HX7628741ebe16e1db2ee2c921a95c4a3e',
-  review_request: 'HXb1845422537d234e66c03017e2e3bc2f',
+  booking_confirmation: 'HX1338185d978acb508f3fd297c6b896a3',
+  checkin_info: 'HXbd22fc0c95d26213e604f02f713d25a9',
+  welcome: 'HX4a07baaacb520ed0d0b34c3ba193f4d9',
+  checkout_reminder: 'HXba30114e10672f1540a52c5e0b58ed80',
+  review_request: 'HX88fcc2f7b6ede032dc108d2434a84e91',
 };
 
 async function get(url, attempt = 1) {

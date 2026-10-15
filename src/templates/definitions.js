@@ -109,6 +109,17 @@ export const TEMPLATES = [
       'Team Zostel Morjim',
   },
   {
+    name: 'checkout_done',
+    category: 'utility',
+    body:
+      'Hey {{1}}! 👋\n' +
+      'Check-out done — you\'re all set! ✅\n' +
+      'Thanks for staying at Zostel Morjim 🧡\n' +
+      'If you left anything behind, just reply here and we\'ll sort it out.\n' +
+      'Safe travels — see you on the next adventure! 🎒\n' +
+      'Team Zostel Morjim',
+  },
+  {
     name: 'review_request',
     category: 'utility',
     body:
@@ -141,6 +152,8 @@ export function templateVariables(name, guest) {
       return [guest.name, guest.room ?? 'Ask reception'];
     case 'checkout_reminder':
       return [guest.name, guest.room ?? 'See reception'];
+    case 'checkout_done':
+      return [guest.name];
     case 'review_request':
       return [guest.name, REVIEW_URL];
     default:

@@ -25,10 +25,10 @@ test('full happy path: booked through checked_out, in order', () => {
   assert.equal(state, 'checked_out');
 });
 
-test('checked_out queues NO message — review requests are staff-selected', () => {
+test('checked_out carries the farewell message (checkout_done)', () => {
   const t = transition('in_stay', 'checked_out');
   assert.equal(t.ok, true);
-  assert.equal(t.message, null);
+  assert.equal(t.message, 'checkout_done');
 });
 
 test('checked_in carries the welcome message', () => {

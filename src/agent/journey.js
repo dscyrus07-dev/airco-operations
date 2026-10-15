@@ -37,12 +37,13 @@ export const EVENTS = {
     message: 'checkout_reminder',
     messageKind: 'journey',
   },
-  // Review requests are STAFF-SELECTED from the "Checking out today" list —
-  // checkout itself queues nothing (state still moves to checked_out).
+  // Review requests are STAFF-SELECTED from the "Checking out today" list.
+  // Checkout itself sends the farewell (checkout_done) — the scheduled
+  // checkout_reminder the night before is separate and stays as-is.
   checked_out: {
     from: ['checkout_pending', 'in_stay', 'checked_in'],
     to: 'checked_out',
-    message: null,
+    message: 'checkout_done',
     messageKind: 'journey',
   },
   review_received: {

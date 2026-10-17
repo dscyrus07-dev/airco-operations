@@ -82,8 +82,10 @@ function cleanFields({ date, time, eventName, description }) {
 // skipped and reported as alreadyReceived — the dashboard can then ask staff
 // whether to send to them again. resend=true targets ONLY those prior
 // recipients, so the two sends never overlap (no guest gets it twice from the
-// confirm flow).
-async function broadcast(activity, { resend = false } = {}) {
+// confirm flow). guestIds (optional): restrict the audience to the dashboard's
+// checked guest list — always intersected with in-house guests, so non-house
+// guests can never be targeted.
+async function broadcast(activity, { resend = false, guestIds = null } = {}) {
   const cfg = getConfig();
   const guests = await query(
     `SELECT id, name, phone, journey_state, ai_paused, activities_opt_out
@@ -91,6 +93,11 @@ async function broadcast(activity, { resend = false } = {}) {
      WHERE journey_state = ANY($1) AND archived = FALSE`,
     [IN_PROPERTY_STATES]
   );
+  const sel = Array.isArray(guestIds)
+    ? new Set(guestIds.map(Number).filter(Number.isInteger))
+    : null;
+  // guests.id is BIGINT → pg returns strings; compare numerically.
+  const inScope = sel ? guests.filter((g) => sel.has(Number(g.id))) : guests;
   const contentHash = activityContentHash(activity);
   const triggerReason = `activity:${activity.id}:${contentHash}:policy_ok`;
   const prior = new Set((await query(
@@ -99,12 +106,12 @@ async function broadcast(activity, { resend = false } = {}) {
        AND status IN ('queued','sending','sent','delivered','read')`,
     [triggerReason]
   )).map((r) => r.guest_id));
-  const alreadyReceived = guests
+  const alreadyReceived = inScope
     .filter((g) => prior.has(g.id))
     .map((g) => ({ guestId: g.id, name: g.name }));
   const audience = resend
-    ? guests.filter((g) => prior.has(g.id))
-    : guests.filter((g) => !prior.has(g.id));
+    ? inScope.filter((g) => prior.has(g.id))
+    : inScope.filter((g) => !prior.has(g.id));
   if (audience.length === 0) return { queued: [], suppressed: [], alreadyReceived };
   const ids = audience.map((g) => g.id);
   const [sentRows, reqRows] = await Promise.all([
@@ -176,7 +183,7 @@ async function broadcast(activity, { resend = false } = {}) {
 // Create an activity. broadcast=true keeps the original one-shot behaviour
 // (create + immediately offer to in-house guests). broadcast=false stores it
 // as draft/scheduled for the dashboard to send later.
-export async function createAndBroadcastActivity({ date, time, eventName, description, broadcast = true }) {
+export async function createAndBroadcastActivity({ date, time, eventName, description, broadcast = true, guestIds = null }) {
   const cfg = getConfig();
   const { cleanDate, cleanTime, cleanName, cleanDescription } = cleanFields({ date, time, eventName, description });
 
@@ -191,14 +198,14 @@ export async function createAndBroadcastActivity({ date, time, eventName, descri
   if (!broadcast) {
     return { activityId: activity.id, eventName: cleanName, status, reached: 0, suppressed: [] };
   }
-  const result = await broadcastActivityById(activity.id);
+  const result = await broadcastActivityById(activity.id, { guestIds });
   return { activityId: activity.id, eventName: cleanName, ...result };
 }
 
 // Run the policy-gated broadcast for a stored activity and mark it sent.
 // Re-sends are allowed and idempotent per guest: only guests who have NOT
 // already received this activity are messaged (new check-ins get it too).
-export async function broadcastActivityById(id, { resend = false } = {}) {
+export async function broadcastActivityById(id, { resend = false, guestIds = null } = {}) {
   const rows = await query(
     `SELECT id, to_char(date, 'YYYY-MM-DD') AS date, time, event_name, description, status, sent_at
      FROM activities WHERE id = $1`,
@@ -207,7 +214,7 @@ export async function broadcastActivityById(id, { resend = false } = {}) {
   if (rows.length === 0) throw new Error('activity not found');
   const activity = rows[0];
 
-  const { queued, suppressed, alreadyReceived } = await broadcast(activity, { resend });
+  const { queued, suppressed, alreadyReceived } = await broadcast(activity, { resend, guestIds });
   await dispatchPending();
   // sent_at marks the FIRST send; re-sends don't move it.
   await query(`UPDATE activities SET status = 'active', sent_at = COALESCE(sent_at, now()) WHERE id = $1`, [id]);

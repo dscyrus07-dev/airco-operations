@@ -59,7 +59,7 @@ export function adminRouter() {
         `SELECT g.id::int AS id, g.phone, g.name, g.room,
                 to_char(g.check_in, 'YYYY-MM-DD') AS check_in,
                 to_char(g.check_out, 'YYYY-MM-DD') AS check_out,
-                g.journey_state, g.ai_paused, g.whatsapp_opt_in, g.created_at,
+                g.journey_state, g.ai_paused, g.whatsapp_opt_in, g.activities_opt_out, g.created_at,
                 (SELECT count(*) FROM messages m
                   WHERE m.guest_id = g.id AND m.direction = 'out' AND m.message_type = 'template'
                     AND (m.created_at AT TIME ZONE 'Asia/Kolkata')::date
@@ -373,12 +373,16 @@ export function adminRouter() {
   // Send (or re-send to new in-house guests) a stored draft/scheduled activity.
   // Body { resend: true } targets ONLY the guests who already received this
   // version — used after the dashboard's "send again to already-sent users?"
-  // confirmation.
+  // confirmation. Body { guestIds: [...] } restricts the audience to the
+  // dashboard's checked guests (always intersected with in-house guests).
   router.post('/api/activities/:id/send', async (req, res) => {
     try {
       const id = Number(req.params.id);
       if (!Number.isInteger(id)) return res.status(400).json({ error: 'bad id' });
-      const result = await broadcastActivityById(id, { resend: req.body?.resend === true });
+      const result = await broadcastActivityById(id, {
+        resend: req.body?.resend === true,
+        guestIds: req.body?.guestIds,
+      });
       res.json({ activityId: id, ...result });
     } catch (err) {
       res.status(400).json({ error: err.message });

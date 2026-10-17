@@ -772,6 +772,7 @@ async function loadGuests() {
     guestsCache = await api('/guests');
     renderGuestFilters();
     renderGuestList();
+    renderActivityAudience();
   } catch (e) { document.getElementById('conn-status').textContent = 'error'; }
 }
 
@@ -1416,16 +1417,63 @@ async function cancelActivity(id) {
   } catch (e) { toast(e.message, true); }
 }
 
+// In-house guest selection for activity sends — ticks persist across refreshes,
+// guests no longer in-house are pruned, policy-blocked guests are shown greyed.
+const activitySel = new Set();
+let activitySelInit = false;
+const IN_HOUSE_STATES = ['checked_in','in_stay','checkout_pending'];
+const audienceEligible = g => !g.ai_paused && !g.activities_opt_out;
+
 function renderActivityAudience() {
-  const IN_HOUSE = ['checked_in','in_stay','checkout_pending'];
-  const house = guestsCache.filter(g => IN_HOUSE.includes(g.journey_state));
-  const willGet = house.filter(g => !g.ai_paused && !g.activities_opt_out);
-  const skipped = house.length - willGet.length;
+  const house = guestsCache.filter(g => IN_HOUSE_STATES.includes(g.journey_state));
   const el = document.getElementById('act-audience');
   if (!el) return;
-  const names = willGet.map(g => esc(g.name)).join(", ") || "—";
-  const skip = skipped ? '<div style="font-size:11.5px;color:var(--amber);margin-top:4px">' + skipped + ' skipped (AI paused / activities off / 5-per-day limit)</div>' : '';
-  el.innerHTML = '<div style="font-size:13px"><b>' + willGet.length + ' guest' + (willGet.length===1?'':'s') + '</b> will receive this: ' + esc(names) + skip + '</div>';
+  if (!activitySelInit) {
+    activitySelInit = true;
+    house.forEach(g => { if (audienceEligible(g)) activitySel.add(g.id); });
+  }
+  const inHouseIds = new Set(house.map(g => g.id));
+  for (const id of [...activitySel]) if (!inHouseIds.has(id)) activitySel.delete(id);
+
+  if (!house.length) {
+    el.innerHTML = '<div style="font-size:13px;color:var(--dim)">No in-house guests right now.</div>';
+    return;
+  }
+  const rows = house.map(g => {
+    const can = audienceEligible(g);
+    const flag = g.ai_paused ? 'AI paused' : (g.activities_opt_out ? 'activities off' : '');
+    return '<label style="display:flex;align-items:center;gap:8px;padding:4px 0;' +
+      'cursor:' + (can ? 'pointer' : 'default') + ';' + (can ? '' : 'opacity:.55') + '">' +
+      '<input type="checkbox"' + (activitySel.has(g.id) ? ' checked' : '') + (can ? '' : ' disabled') +
+      ' onchange="audToggle(' + g.id + ',this.checked)">' +
+      '<span>' + esc(g.name) + (g.room ? ' · ' + esc(g.room) : '') + '</span>' +
+      (flag ? '<span style="margin-left:auto;font-size:11px;color:var(--amber)">' + flag + '</span>' : '') +
+      '</label>';
+  }).join('');
+  const selCount = house.filter(g => activitySel.has(g.id)).length;
+  el.innerHTML =
+    '<div style="display:flex;justify-content:space-between;align-items:center;font-size:12px;color:var(--dim);padding-bottom:6px;border-bottom:1px solid var(--line);margin-bottom:4px">' +
+      '<span><b style="color:var(--text)">' + selCount + '</b> of ' + house.length + ' selected · max 5 sends/guest/day</span>' +
+      '<span><a href="#" onclick="audSelAll(true);return false">All</a> · <a href="#" onclick="audSelAll(false);return false">None</a></span>' +
+    '</div>' +
+    '<div style="max-height:150px;overflow:auto">' + rows + '</div>';
+}
+
+function audToggle(id, on) {
+  if (on) activitySel.add(id); else activitySel.delete(id);
+  renderActivityAudience();
+}
+
+function audSelAll(on) {
+  guestsCache.filter(g => IN_HOUSE_STATES.includes(g.journey_state)).forEach(g => {
+    if (audienceEligible(g)) { if (on) activitySel.add(g.id); else activitySel.delete(g.id); }
+  });
+  renderActivityAudience();
+}
+
+function selectedAudienceIds() {
+  const inHouseIds = new Set(guestsCache.filter(g => IN_HOUSE_STATES.includes(g.journey_state)).map(g => g.id));
+  return [...activitySel].filter(id => inHouseIds.has(id));
 }
 
 /* ---------- USAGE ---------- */
@@ -1837,7 +1885,10 @@ async function postActivity(broadcastNow = true) {
     description: document.getElementById('act-desc').value || null,
     broadcast: !!broadcastNow,
   };
-  const btn = document.getElementById('act-send-btn');
+  if (broadcastNow) {
+    body.guestIds = selectedAudienceIds();
+    if (!body.guestIds.length) { toast('Tick at least one in-house guest above.', true); return; }
+  }
   btnLoading('act-send-btn', true);
   try {
     const r = await api('/activities', { method: 'POST', body: JSON.stringify(body) });
@@ -1870,16 +1921,18 @@ async function scheduleActivity() {
 async function sendActivityNow(id) {
   const a = (activitiesCache ?? []).find(x => x.id === id);
   const resending = Boolean(a?.sent_at);
+  const guestIds = selectedAudienceIds();
+  if (!guestIds.length) { toast('Tick at least one in-house guest above.', true); return; }
   const ok = await confirmDialog({
     title: resending ? 'Send to new guests?' : 'Send this activity now?',
     message: resending
-      ? 'Only guests who have NOT already received this activity will get it (new check-ins). Policy still applies.'
-      : 'It will be offered to every in-house guest, subject to policy (max 5 activity sends per guest per day).',
+      ? 'Only selected guests who have NOT already received this activity will get it. Policy still applies.'
+      : `It will be offered to the ${guestIds.length} ticked guest${guestIds.length===1?'':'s'}, subject to policy (max 5 activity sends per guest per day).`,
     confirmText: resending ? 'Send to new guests' : 'Send now',
   });
   if (!ok) return;
   try {
-    const r = await api('/activities/' + id + '/send', { method: 'POST', body: '{}' });
+    const r = await api('/activities/' + id + '/send', { method: 'POST', body: JSON.stringify({ guestIds }) });
     let reached = r.reached;
     let suppressed = r.suppressed ?? [];
     // Ask before sending again to guests who already got this activity.
@@ -1891,7 +1944,7 @@ async function sendActivityNow(id) {
         confirmText: 'Send again',
       });
       if (again) {
-        const r2 = await api('/activities/' + id + '/send', { method: 'POST', body: JSON.stringify({ resend: true }) });
+        const r2 = await api('/activities/' + id + '/send', { method: 'POST', body: JSON.stringify({ resend: true, guestIds }) });
         reached += r2.reached;
         suppressed = suppressed.concat(r2.suppressed ?? []);
       }

@@ -134,6 +134,42 @@ test('journey sends (welcome etc.) do not consume the activity allowance', async
   if (r.skipped) t.skip(r.reason);
 });
 
+test('guestIds targets only the selected in-house guests', async (t) => {
+  const r = await withDb(async (pool) => {
+    await cleanTables(pool);
+    const a = await insertGuest(pool, { phone: '919700000020', name: 'Picked', state: 'in_stay' });
+    await insertGuest(pool, { phone: '919700000021', name: 'Skipped', state: 'in_stay' });
+    const res = await createAndBroadcastActivity({
+      date: istDate(0), time: '9 pm', eventName: 'Quiz', description: null, broadcast: true,
+      guestIds: [a.id],
+    });
+    assert.equal(res.reached, 1);
+    assert.deepEqual(res.guests, ['Picked']);
+    const rows = (await pool.query(
+      `SELECT guest_id FROM messages WHERE trigger_reason LIKE 'activity:%'`
+    )).rows;
+    assert.equal(rows.length, 1, 'only the selected guest got it');
+    return true;
+  });
+  if (r.skipped) t.skip(r.reason);
+});
+
+test('guestIds never reaches guests who are not in-house', async (t) => {
+  const r = await withDb(async (pool) => {
+    await cleanTables(pool);
+    const g = await insertGuest(pool, { phone: '919700000022', name: 'Departed', state: 'checked_out' });
+    const res = await createAndBroadcastActivity({
+      date: istDate(0), time: '9 pm', eventName: 'Quiz', description: null, broadcast: true,
+      guestIds: [g.id],
+    });
+    assert.equal(res.reached, 0, 'checked-out guest excluded even when selected');
+    const n = (await pool.query('SELECT count(*)::int AS n FROM messages')).rows[0].n;
+    assert.equal(n, 0);
+    return true;
+  });
+  if (r.skipped) t.skip(r.reason);
+});
+
 test('editing the content makes the activity sendable again — everyone gets the new version', async (t) => {
   const r = await withDb(async (pool) => {
     await cleanTables(pool);

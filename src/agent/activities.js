@@ -78,7 +78,12 @@ function cleanFields({ date, time, eventName, description }) {
 // (or dates) makes it sendable again. Guests who already received THIS
 // exact version are excluded; the send goes out as an APPROVED TEMPLATE
 // (activity_notice) so it reaches in-house guests without a 24h session.
-async function broadcast(activity) {
+// resend=false (default): guests who already received THIS content version are
+// skipped and reported as alreadyReceived — the dashboard can then ask staff
+// whether to send to them again. resend=true targets ONLY those prior
+// recipients, so the two sends never overlap (no guest gets it twice from the
+// confirm flow).
+async function broadcast(activity, { resend = false } = {}) {
   const cfg = getConfig();
   const guests = await query(
     `SELECT id, name, phone, journey_state, ai_paused, activities_opt_out
@@ -94,14 +99,22 @@ async function broadcast(activity) {
        AND status IN ('queued','sending','sent','delivered','read')`,
     [triggerReason]
   )).map((r) => r.guest_id));
-  const audience = guests.filter((g) => !prior.has(g.id));
-  if (audience.length === 0) return { queued: [], suppressed: [] };
-  const ids = guests.map((g) => g.id);
+  const alreadyReceived = guests
+    .filter((g) => prior.has(g.id))
+    .map((g) => ({ guestId: g.id, name: g.name }));
+  const audience = resend
+    ? guests.filter((g) => prior.has(g.id))
+    : guests.filter((g) => !prior.has(g.id));
+  if (audience.length === 0) return { queued: [], suppressed: [], alreadyReceived };
+  const ids = audience.map((g) => g.id);
   const [sentRows, reqRows] = await Promise.all([
+    // Activity sends get their own per-guest daily cap (default 5) — several
+    // activities can happen in one day, and journey sends (welcome etc.) must
+    // not eat into the activity allowance.
     query(
       `SELECT guest_id, count(*)::int AS n FROM messages
        WHERE guest_id = ANY($1) AND direction = 'out'
-         AND trigger_reason LIKE '%:policy_ok'
+         AND trigger_reason LIKE 'activity:%'
          AND (created_at AT TIME ZONE 'Asia/Kolkata')::date
              = (now() AT TIME ZONE 'Asia/Kolkata')::date
        GROUP BY guest_id`,
@@ -127,7 +140,8 @@ async function broadcast(activity) {
       proactiveSentToday: sentMap.get(g.id) ?? 0,
       openRequestCount: openReqMap.get(g.id) ?? 0,
       kind: 'activity',
-      cap: cfg.proactiveDailyCap,
+      cap: cfg.activityGuestCap,
+      capReason: 'activity_cap_reached',
     });
     if (!decision.ok) {
       suppressed.push({ guestId: g.id, name: g.name, reason: decision.reason });
@@ -156,7 +170,7 @@ async function broadcast(activity) {
   }
 
   await dispatchPending();
-  return { queued, suppressed };
+  return { queued, suppressed, alreadyReceived };
 }
 
 // Create an activity. broadcast=true keeps the original one-shot behaviour
@@ -184,7 +198,7 @@ export async function createAndBroadcastActivity({ date, time, eventName, descri
 // Run the policy-gated broadcast for a stored activity and mark it sent.
 // Re-sends are allowed and idempotent per guest: only guests who have NOT
 // already received this activity are messaged (new check-ins get it too).
-export async function broadcastActivityById(id) {
+export async function broadcastActivityById(id, { resend = false } = {}) {
   const rows = await query(
     `SELECT id, to_char(date, 'YYYY-MM-DD') AS date, time, event_name, description, status, sent_at
      FROM activities WHERE id = $1`,
@@ -193,13 +207,14 @@ export async function broadcastActivityById(id) {
   if (rows.length === 0) throw new Error('activity not found');
   const activity = rows[0];
 
-  const { queued, suppressed } = await broadcast(activity);
+  const { queued, suppressed, alreadyReceived } = await broadcast(activity, { resend });
   await dispatchPending();
   // sent_at marks the FIRST send; re-sends don't move it.
   await query(`UPDATE activities SET status = 'active', sent_at = COALESCE(sent_at, now()) WHERE id = $1`, [id]);
   return {
     reached: queued.length,
     suppressed,
+    alreadyReceived,
     guests: queued.map((q) => q.name),
   };
 }
@@ -257,7 +272,7 @@ export async function getActivity(id) {
   const rows = await query(
     `SELECT a.id, to_char(a.date, 'YYYY-MM-DD') AS date, a.time, a.event_name, a.description, a.status, a.sent_at,
             (SELECT count(*)::int FROM messages m
-              WHERE m.trigger_reason = 'activity:' || a.id || ':policy_ok') AS sent_count
+              WHERE m.trigger_reason LIKE 'activity:' || a.id || ':%') AS sent_count
      FROM activities a WHERE a.id = $1`,
     [id]
   );
@@ -268,7 +283,7 @@ export async function listActivities(limit = 50) {
   return query(
     `SELECT a.id, to_char(a.date, 'YYYY-MM-DD') AS date, a.time, a.event_name, a.description, a.status, a.sent_at,
             (SELECT count(*)::int FROM messages m
-              WHERE m.trigger_reason = 'activity:' || a.id || ':policy_ok') AS sent_count
+              WHERE m.trigger_reason LIKE 'activity:' || a.id || ':%') AS sent_count
      FROM activities a
      ORDER BY a.id DESC
      LIMIT $1`,

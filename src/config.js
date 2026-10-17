@@ -26,6 +26,7 @@ export function loadConfig(env = process.env) {
     timezone: 'Asia/Kolkata',
     property: 'Zostel Morjim',
     proactiveDailyCap: Number(env.PROACTIVE_DAILY_CAP || 2),
+    activityGuestCap: Number(env.ACTIVITY_GUEST_CAP || 5),
     // Scheduled send times (Asia/Kolkata). Configurable, not hardcoded in logic.
     preArrivalSendHour: Number(env.PRE_ARRIVAL_SEND_HOUR ?? 10),
     welcomeSendHour: Number(env.WELCOME_SEND_HOUR ?? 10),

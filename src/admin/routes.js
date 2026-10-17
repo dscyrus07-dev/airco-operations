@@ -371,11 +371,14 @@ export function adminRouter() {
   });
 
   // Send (or re-send to new in-house guests) a stored draft/scheduled activity.
+  // Body { resend: true } targets ONLY the guests who already received this
+  // version — used after the dashboard's "send again to already-sent users?"
+  // confirmation.
   router.post('/api/activities/:id/send', async (req, res) => {
     try {
       const id = Number(req.params.id);
       if (!Number.isInteger(id)) return res.status(400).json({ error: 'bad id' });
-      const result = await broadcastActivityById(id);
+      const result = await broadcastActivityById(id, { resend: req.body?.resend === true });
       res.json({ activityId: id, ...result });
     } catch (err) {
       res.status(400).json({ error: err.message });

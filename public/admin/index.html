@@ -1424,7 +1424,7 @@ function renderActivityAudience() {
   const el = document.getElementById('act-audience');
   if (!el) return;
   const names = willGet.map(g => esc(g.name)).join(", ") || "—";
-  const skip = skipped ? '<div style="font-size:11.5px;color:var(--amber);margin-top:4px">' + skipped + ' skipped (AI paused / activities off / daily cap)</div>' : '';
+  const skip = skipped ? '<div style="font-size:11.5px;color:var(--amber);margin-top:4px">' + skipped + ' skipped (AI paused / activities off / 5-per-day limit)</div>' : '';
   el.innerHTML = '<div style="font-size:13px"><b>' + willGet.length + ' guest' + (willGet.length===1?'':'s') + '</b> will receive this: ' + esc(names) + skip + '</div>';
 }
 
@@ -1874,14 +1874,33 @@ async function sendActivityNow(id) {
     title: resending ? 'Send to new guests?' : 'Send this activity now?',
     message: resending
       ? 'Only guests who have NOT already received this activity will get it (new check-ins). Policy still applies.'
-      : 'It will be offered to every in-house guest, subject to policy.',
+      : 'It will be offered to every in-house guest, subject to policy (max 5 activity sends per guest per day).',
     confirmText: resending ? 'Send to new guests' : 'Send now',
   });
   if (!ok) return;
   try {
-    const r = await api('/activities/' + id + '/send', { method: 'POST' });
-    if (r.reached === 0) toast('No new guests to send to — everyone in-house already received it.');
-    else celebrate(`Activity sent to ${r.reached} guest${r.reached===1?'':'s'}${resending ? ' (new)' : ''}`);
+    const r = await api('/activities/' + id + '/send', { method: 'POST', body: '{}' });
+    let reached = r.reached;
+    let suppressed = r.suppressed ?? [];
+    // Ask before sending again to guests who already got this activity.
+    if ((r.alreadyReceived ?? []).length > 0) {
+      const names = r.alreadyReceived.map(g => g.name).join(', ');
+      const again = await confirmDialog({
+        title: 'Send again to already-sent guests?',
+        message: `${r.alreadyReceived.length} guest${r.alreadyReceived.length===1?'':'s'} already received this activity: ${names}. Send it to them again?`,
+        confirmText: 'Send again',
+      });
+      if (again) {
+        const r2 = await api('/activities/' + id + '/send', { method: 'POST', body: JSON.stringify({ resend: true }) });
+        reached += r2.reached;
+        suppressed = suppressed.concat(r2.suppressed ?? []);
+      }
+    }
+    if (reached === 0 && suppressed.length === 0) toast('No one to send to — everyone in-house already received it.');
+    else {
+      const skip = suppressed.length ? ` Skipped: ${suppressed.map(s => `${s.name} (${s.reason.replace(/_/g,' ')})`).join(', ')}` : '';
+      celebrate(`Activity sent to ${reached} guest${reached===1?'':'s'}.${skip}`);
+    }
   } catch (e) { toast(e.message, true); }
   loadActivities();
 }

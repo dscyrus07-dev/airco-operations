@@ -1,7 +1,7 @@
-export function canSendProactive({ guest, proactiveSentToday, openRequestCount, kind, cap = 2 }) {
+export function canSendProactive({ guest, proactiveSentToday, openRequestCount, kind, cap = 2, capReason = 'daily_cap_reached' }) {
   if (guest.ai_paused) return { ok: false, reason: 'ai_paused' };
   if (guest.whatsapp_opt_in === false) return { ok: false, reason: 'no_whatsapp_opt_in' };
-  if (proactiveSentToday >= cap) return { ok: false, reason: 'daily_cap_reached' };
+  if (proactiveSentToday >= cap) return { ok: false, reason: capReason };
   if (kind === 'activity') {
     if (['checked_out', 'review_requested', 'closed'].includes(guest.journey_state)) {
       return { ok: false, reason: 'after_checkout' };
